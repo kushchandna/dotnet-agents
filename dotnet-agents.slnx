@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/ConsoleSample/ConsoleSample.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/DotnetAgents.Api/DotnetAgents.Api.csproj" />
+    <Project Path="src/DotnetAgents.Core/DotnetAgents.Core.csproj" />
+    <Project Path="src/DotnetAgents.Runtime/DotnetAgents.Runtime.csproj" />
+    <Project Path="src/DotnetAgents.Tools.BuiltIn/DotnetAgents.Tools.BuiltIn.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DotnetAgents.Api.Tests/DotnetAgents.Api.Tests.csproj" />
+    <Project Path="tests/DotnetAgents.Core.Tests/DotnetAgents.Core.Tests.csproj" />
+    <Project Path="tests/DotnetAgents.Runtime.Tests/DotnetAgents.Runtime.Tests.csproj" />
+    <Project Path="tests/DotnetAgents.Tools.BuiltIn.Tests/DotnetAgents.Tools.BuiltIn.Tests.csproj" />
+  </Folder>
+</Solution>

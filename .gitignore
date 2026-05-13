@@ -1,0 +1,69 @@
+# Build output
+bin/
+obj/
+out/
+*.dll
+*.pdb
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+*.sln.docstates
+*.swp
+
+# Rider
+.idea/
+*.iml
+
+# .NET
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.binlog
+TestResults/
+[Tt]est[Rr]esults/
+coverage*.json
+coverage*.xml
+coverage*.info
+
+# Node / Web
+node_modules/
+dist/
+.next/
+.nuxt/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Generated client / API stubs
+web/src/api/generated/
+
+# Playwright
+playwright-report/
+test-results/
+
+# Runtime data
+sessions/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.local
+*.local
+
+# NuGet
+*.nupkg
+.nuget/
+packages/
