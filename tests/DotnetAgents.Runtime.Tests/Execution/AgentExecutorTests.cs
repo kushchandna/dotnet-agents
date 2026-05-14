@@ -133,4 +133,85 @@ public class AgentExecutorTests
 
         Assert.That(updates.OfType<ErrorUpdate>().Any(), Is.True);
     }
+
+    [Test]
+    public async Task RunStreaming_ReplaysSessionHistory_IntoChatMessages()
+    {
+        IList<ChatMessage> capturedMessages = null!;
+
+        async IAsyncEnumerable<ChatResponseUpdate> Stream([EnumeratorCancellation] CancellationToken ct = default)
+        {
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "ok");
+            await Task.CompletedTask;
+        }
+
+        var client = new StubChatClient(msgs => { capturedMessages = msgs; return Stream(); });
+        var cfg = BuildConfig();
+
+        var session = await _store.CreateAsync("u", "a");
+        var seeded = session with
+        {
+            Messages = [
+                new SessionMessage { Id="m1", Role="user", Content="hello", Timestamp=DateTimeOffset.UtcNow },
+                new SessionMessage { Id="m2", Role="assistant", Content="hi", Timestamp=DateTimeOffset.UtcNow },
+                new SessionMessage {
+                    Id="m3", Role="tool", Timestamp=DateTimeOffset.UtcNow,
+                    ToolCalls=[new ToolCallRecord { CallId="c1", Name="echo", Arguments="{\"text\":\"x\"}", Result="x" }]
+                }
+            ]
+        };
+        await _store.SaveAsync(seeded);
+
+        var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry);
+
+        await foreach (var _ in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "next turn"))) { }
+
+        Assert.That(capturedMessages, Is.Not.Null);
+        // Expected order: System (agent.SystemPrompt) + user(hello) + assistant(hi)
+        //               + assistant(FunctionCall) + tool(FunctionResult) + user(next turn)
+        Assert.That(capturedMessages.Count, Is.EqualTo(6));
+        Assert.That(capturedMessages[0].Role, Is.EqualTo(ChatRole.System));
+        Assert.That(capturedMessages[1].Role, Is.EqualTo(ChatRole.User));
+        Assert.That(capturedMessages[2].Role, Is.EqualTo(ChatRole.Assistant));
+        Assert.That(capturedMessages[3].Role, Is.EqualTo(ChatRole.Assistant));
+        Assert.That(capturedMessages[3].Contents.OfType<FunctionCallContent>().Any(), Is.True);
+        Assert.That(capturedMessages[4].Role, Is.EqualTo(ChatRole.Tool));
+        Assert.That(capturedMessages[4].Contents.OfType<FunctionResultContent>().Any(), Is.True);
+        Assert.That(capturedMessages[5].Role, Is.EqualTo(ChatRole.User));
+        Assert.That(capturedMessages[5].Text, Is.EqualTo("next turn"));
+    }
+
+    [Test]
+    public async Task RunStreaming_ToolLoopExceedsLimit_YieldsErrorAndSavesSession()
+    {
+        int callCount = 0;
+        async IAsyncEnumerable<ChatResponseUpdate> AlwaysToolCall([EnumeratorCancellation] CancellationToken ct = default)
+        {
+            callCount++;
+            yield return new ChatResponseUpdate(ChatRole.Assistant,
+                new[] { new FunctionCallContent($"call{callCount}", "echo",
+                    new Dictionary<string, object?> { ["text"] = "spam" }) });
+            await Task.CompletedTask;
+        }
+
+        var client = new StubChatClient(_ => AlwaysToolCall());
+        var cfg = BuildConfig();
+        var session = await _store.CreateAsync("u", "a");
+        var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry);
+
+        var updates = new List<AgentStreamUpdate>();
+        await foreach (var u in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "go")))
+            updates.Add(u);
+
+        Assert.That(callCount, Is.EqualTo(10), "should hit MaxToolIterations of 10");
+        Assert.That(updates.OfType<ErrorUpdate>().Single().Message, Does.Contain("Tool iteration limit reached"));
+        Assert.That(updates.OfType<ToolCallUpdate>().Count(), Is.EqualTo(10));
+        Assert.That(updates.OfType<ToolResultUpdate>().Count(), Is.EqualTo(10));
+
+        var loaded = await _store.GetAsync("u", session.Id);
+        Assert.That(loaded, Is.Not.Null);
+        Assert.That(loaded!.Messages.Count, Is.GreaterThanOrEqualTo(11), "user message + 10 tool turns persisted");
+    }
 }
