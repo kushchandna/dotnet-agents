@@ -41,4 +41,59 @@ public class HttpGetToolTests
         Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => fn.InvokeAsync(new AIFunctionArguments { ["url"] = "https://evil.test/x" }).AsTask());
     }
+
+    [Test]
+    public void SubdomainSuffixBypass_IsBlocked()
+    {
+        var tool = new HttpGetTool(["https://api.example.com"], new StubFactory(new StubHandler("")));
+        var fn = tool.AsAIFunction();
+        Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => fn.InvokeAsync(new AIFunctionArguments { ["url"] = "https://api.example.com.evil.test/leak" }).AsTask());
+    }
+
+    [Test]
+    public void UserinfoBypass_IsBlocked()
+    {
+        var tool = new HttpGetTool(["https://api.example.com"], new StubFactory(new StubHandler("")));
+        var fn = tool.AsAIFunction();
+        Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => fn.InvokeAsync(new AIFunctionArguments { ["url"] = "https://api.example.com@evil.test/leak" }).AsTask());
+    }
+
+    [Test]
+    public void SchemeMismatch_IsBlocked()
+    {
+        var tool = new HttpGetTool(["https://api.example.com"], new StubFactory(new StubHandler("")));
+        var fn = tool.AsAIFunction();
+        Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => fn.InvokeAsync(new AIFunctionArguments { ["url"] = "http://api.example.com/" }).AsTask());
+    }
+
+    [Test]
+    public void PathPrefix_DifferentPath_IsBlocked()
+    {
+        var tool = new HttpGetTool(["https://api.example.com/v1"], new StubFactory(new StubHandler("")));
+        var fn = tool.AsAIFunction();
+        Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => fn.InvokeAsync(new AIFunctionArguments { ["url"] = "https://api.example.com/v2/x" }).AsTask());
+    }
+
+    [Test]
+    public async Task PathPrefix_MatchingPath_IsAllowed()
+    {
+        var handler = new StubHandler("v1-body");
+        var tool = new HttpGetTool(["https://api.example.com/v1"], new StubFactory(handler));
+        var fn = tool.AsAIFunction();
+        var result = await fn.InvokeAsync(new AIFunctionArguments { ["url"] = "https://api.example.com/v1/foo" });
+        Assert.That(result?.ToString(), Is.EqualTo("v1-body"));
+    }
+
+    [Test]
+    public void NonHttpScheme_Throws()
+    {
+        var tool = new HttpGetTool(["https://api.example.com"], new StubFactory(new StubHandler("")));
+        var fn = tool.AsAIFunction();
+        Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => fn.InvokeAsync(new AIFunctionArguments { ["url"] = "file:///etc/passwd" }).AsTask());
+    }
 }
