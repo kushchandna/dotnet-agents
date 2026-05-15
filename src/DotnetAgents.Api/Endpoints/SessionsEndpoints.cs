@@ -45,6 +45,8 @@ public static class SessionsEndpoints
         app.MapGet("/api/users/{userId}/sessions/{sessionId}/messages",
             async (string userId, string sessionId, ISessionStore store) =>
             {
+                var session = await store.GetAsync(userId, sessionId);
+                if (session is null) return Results.NotFound();
                 var msgs = await store.GetMessagesAsync(userId, sessionId);
                 return Results.Ok(msgs.Select(m => new MessageDto(m.Id, m.Role, m.Content, m.ToolCalls, m.Timestamp)).ToArray());
             }).WithName("ListMessages").WithOpenApi();

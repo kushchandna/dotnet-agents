@@ -68,4 +68,12 @@ public class SessionEndpointTests
         var msgs = await client.GetFromJsonAsync<MessageDto[]>($"/api/users/alice/sessions/{s!.Id}/messages");
         Assert.That(msgs, Is.Empty);
     }
+
+    [Test]
+    public async Task GetMessages_ForMissingSession_Returns404()
+    {
+        await using var f = ApiTestFactory.Create();
+        var resp = await f.CreateClient().GetAsync("/api/users/alice/sessions/missing/messages");
+        Assert.That(resp.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
 }
