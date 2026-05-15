@@ -1,13 +1,11 @@
-# dotnet-agents
+# Dotnet Agents
 
 A configuration-driven, JSON-backed agent runtime in .NET 10.
-
-> Status: **M1 work-in-progress.** Public APIs, configuration shape, and CLI flags will change.
 
 ## Requirements
 
 - .NET 10 SDK
-- Node 24 (for the upcoming web UI)
+- Node 24 (for the web UI)
 
 ## Build & test
 
@@ -16,16 +14,35 @@ dotnet build
 dotnet test
 ```
 
-## Layout
+## Run the API
 
+```bash
+dotnet run --project src/DotnetAgents.Api -- --config /path/to/config.json
 ```
-src/
-  DotnetAgents.Core           # config models, abstractions, validation
-  DotnetAgents.Tools.BuiltIn  # built-in tools (fs, http, shell, ...)
-  DotnetAgents.Runtime        # agent + session host, chat-client wiring
-  DotnetAgents.Api            # ASP.NET Core HTTP/SSE surface
-samples/
-  ConsoleSample               # minimal CLI driver for the runtime
-tests/
-  DotnetAgents.*.Tests        # NUnit test projects (one per src project)
+
+API listens on `http://0.0.0.0:5000`.
+
+Config path resolution: `--config <path>` CLI > `DOTNET_AGENTS_CONFIG` env > `./config.json`.
+
+## Run the web UI
+
+> Coming soon.
+
+```bash
+cd web
+npm install
+npm run dev
 ```
+
+Web UI listens on `http://0.0.0.0:5173`.
+
+## What's available
+
+- Configuration-driven agent + model + tool definitions (JSON)
+- Multi-provider model support: OpenAI, OpenAI-compatible, Ollama
+- Agentic execution via Microsoft.Agents.AI (`ChatClientAgent`, tool calling loop, session history)
+- File-backed session persistence per user
+- Built-in tools: echo, get_current_time, read_file, http_get
+- REST API: agents, users endpoints
+- SSE message streaming endpoint (in progress)
+- Web UI (in progress)
