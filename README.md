@@ -33,6 +33,17 @@ npm run dev
 
 Open `http://localhost:5173` (or `http://<host-ip>:5173` from another machine on your LAN).
 
+## Restarting the API
+
+After editing `config.json`, restart the API to pick up the changes:
+
+```bash
+./restart-api.sh                      # uses config.json by default
+./restart-api.sh /path/to/config.json # optional custom config path
+```
+
+The script kills any running API process, starts a new one in the background, and waits until `/health` responds. Logs go to `/tmp/dotnet-agents-api.log`.
+
 ## Configuration
 
 The API resolves the config path in this order:
