@@ -58,4 +58,28 @@ public class MessagesStreamingTests
             "/api/users/alice/sessions/missing/messages", new { content = "x" });
         Assert.That((int)resp.StatusCode, Is.EqualTo(404));
     }
+
+    [Test]
+    public async Task PostMessage_RuntimeThrows_StreamsErrorEvent()
+    {
+        async IAsyncEnumerable<AgentStreamUpdate> ThrowingStream([EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.CompletedTask;
+            throw new InvalidOperationException("boom");
+            yield break;
+        }
+
+        await using var f = ApiTestFactory.Create(runtime: new StubRuntime(_ => ThrowingStream()));
+        var client = f.CreateClient();
+        var s = await (await client.PostAsJsonAsync("/api/users/alice/sessions", new { agentId = "assistant" }))
+            .Content.ReadFromJsonAsync<DotnetAgents.Api.Dto.SessionDto>();
+
+        using var req = new HttpRequestMessage(HttpMethod.Post,
+            $"/api/users/alice/sessions/{s!.Id}/messages")
+        { Content = JsonContent.Create(new { content = "hello" }) };
+        using var resp = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+        var body = await resp.Content.ReadAsStringAsync();
+        Assert.That(body, Does.Contain("\"type\":\"error\""));
+        Assert.That(body, Does.Contain("boom"));
+    }
 }

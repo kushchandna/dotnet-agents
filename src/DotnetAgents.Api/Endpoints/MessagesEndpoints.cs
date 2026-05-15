@@ -34,21 +34,31 @@ public static class MessagesEndpoints
             ctx.Response.Headers["X-Accel-Buffering"] = "no";
             await ctx.Response.Body.FlushAsync(ct);
 
-            await foreach (var update in runtime.RunStreamingAsync(new AgentRunRequest(userId, sessionId, request.Content), ct))
+            try
             {
-                StreamEventDto evt = update switch
+                await foreach (var update in runtime.RunStreamingAsync(new AgentRunRequest(userId, sessionId, request.Content), ct))
                 {
-                    DeltaUpdate d        => new DeltaEvent(d.Content),
-                    ToolCallUpdate tc    => new ToolCallEvent(tc.CallId, tc.Name, tc.Arguments),
-                    ToolResultUpdate tr  => new ToolResultEvent(tr.CallId, tr.Name, tr.Result),
-                    DoneUpdate done      => new DoneEvent(done.MessageId),
-                    ErrorUpdate err      => new ErrorEvent(err.Message),
-                    _                    => new ErrorEvent("Unknown update type")
-                };
-                var bytes = Encoding.UTF8.GetBytes($"data: {JsonSerializer.Serialize(evt, JsonOpts)}\n\n");
-                await ctx.Response.Body.WriteAsync(bytes, ct);
+                    StreamEventDto evt = update switch
+                    {
+                        DeltaUpdate d        => new DeltaEvent(d.Content),
+                        ToolCallUpdate tc    => new ToolCallEvent(tc.CallId, tc.Name, tc.Arguments),
+                        ToolResultUpdate tr  => new ToolResultEvent(tr.CallId, tr.Name, tr.Result),
+                        DoneUpdate done      => new DoneEvent(done.MessageId),
+                        ErrorUpdate err      => new ErrorEvent(err.Message),
+                        _                    => new ErrorEvent("Unknown update type")
+                    };
+                    var bytes = Encoding.UTF8.GetBytes($"data: {JsonSerializer.Serialize(evt, JsonOpts)}\n\n");
+                    await ctx.Response.Body.WriteAsync(bytes, ct);
+                    await ctx.Response.Body.FlushAsync(ct);
+                }
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                StreamEventDto errEvt = new ErrorEvent(ex.Message);
+                var errBytes = Encoding.UTF8.GetBytes($"data: {JsonSerializer.Serialize(errEvt, JsonOpts)}\n\n");
+                await ctx.Response.Body.WriteAsync(errBytes, ct);
                 await ctx.Response.Body.FlushAsync(ct);
             }
-        });
+        }).WithName("PostMessage").WithOpenApi();
     }
 }
