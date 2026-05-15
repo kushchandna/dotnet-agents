@@ -30,6 +30,7 @@ export function ChatView({ userId, sessionId, initialMessages = [] }: Props) {
       if (tc) tc.result = e.result;
     } else if (e.type === 'done') {
       const toolCalls = pendingToolCallsRef.current.length > 0 ? [...pendingToolCallsRef.current] : null;
+      console.log('[ChatView] done fired — content length:', streamingRef.current.length, 'toolCalls:', toolCalls?.length ?? 0);
       setMessages((ms) => [...ms, { id: e.messageId, role: 'assistant', content: streamingRef.current, toolCalls }]);
       streamingRef.current = '';
       pendingToolCallsRef.current = [];
@@ -46,12 +47,15 @@ export function ChatView({ userId, sessionId, initialMessages = [] }: Props) {
 
   useEffect(() => {
     cancel();
-    fetch(`/api/users/${userId}/sessions/${sessionId}/messages`)
-      .then((r) => r.json()).then(setMessages).catch(() => setMessages([]));
+    const ac = new AbortController();
+    fetch(`/api/users/${userId}/sessions/${sessionId}/messages`, { signal: ac.signal })
+      .then((r) => r.json()).then(setMessages).catch((err) => {
+        if ((err as Error).name !== 'AbortError') setMessages([]);
+      });
     streamingRef.current = '';
     pendingToolCallsRef.current = [];
     setStreamingContent('');
-    return () => { cancel(); };
+    return () => { ac.abort(); cancel(); };
   }, [userId, sessionId, cancel]);
 
   const submit = async (ev: React.FormEvent) => {
