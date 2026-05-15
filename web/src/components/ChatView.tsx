@@ -17,30 +17,42 @@ export function ChatView({ userId, sessionId, initialMessages = [] }: Props) {
   const streamingRef = useRef('');
   const [streamingContent, setStreamingContent] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    fetch(`/api/users/${userId}/sessions/${sessionId}/messages`)
-      .then((r) => r.json()).then(setMessages).catch(() => setMessages([]));
-    streamingRef.current = '';
-    setStreamingContent('');
-  }, [userId, sessionId]);
+  const pendingToolCallsRef = useRef<{ callId: string; name: string; arguments: string; result?: string }[]>([]);
 
   const handleEvent = useCallback((e: StreamEvent) => {
     if (e.type === 'delta') {
       streamingRef.current += e.content;
       setStreamingContent(streamingRef.current);
+    } else if (e.type === 'tool_call') {
+      pendingToolCallsRef.current.push({ callId: e.callId, name: e.name, arguments: e.arguments });
+    } else if (e.type === 'tool_result') {
+      const tc = pendingToolCallsRef.current.find((t) => t.callId === e.callId);
+      if (tc) tc.result = e.result;
     } else if (e.type === 'done') {
-      setMessages((ms) => [...ms, { id: e.messageId, role: 'assistant', content: streamingRef.current }]);
+      const toolCalls = pendingToolCallsRef.current.length > 0 ? [...pendingToolCallsRef.current] : null;
+      setMessages((ms) => [...ms, { id: e.messageId, role: 'assistant', content: streamingRef.current, toolCalls }]);
       streamingRef.current = '';
+      pendingToolCallsRef.current = [];
       setStreamingContent('');
     } else if (e.type === 'error') {
       setMessages((ms) => [...ms, { id: `err-${Date.now()}`, role: 'assistant', content: `Error: ${e.message}` }]);
       streamingRef.current = '';
+      pendingToolCallsRef.current = [];
       setStreamingContent('');
     }
   }, []);
 
   const { streaming, send, cancel } = useStream(userId, sessionId, handleEvent);
+
+  useEffect(() => {
+    cancel();
+    fetch(`/api/users/${userId}/sessions/${sessionId}/messages`)
+      .then((r) => r.json()).then(setMessages).catch(() => setMessages([]));
+    streamingRef.current = '';
+    pendingToolCallsRef.current = [];
+    setStreamingContent('');
+    return () => { cancel(); };
+  }, [userId, sessionId, cancel]);
 
   const submit = async (ev: React.FormEvent) => {
     ev.preventDefault();
