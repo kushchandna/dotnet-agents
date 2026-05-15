@@ -1,0 +1,43 @@
+{
+  "$schema": "./config.schema.json",
+  "agents": [
+    {
+      "id": "assistant",
+      "name": "Assistant",
+      "description": "A helpful general-purpose assistant",
+      "modelId": "gpt4o",
+      "systemPrompt": "You are a helpful assistant.",
+      "tools": ["get_current_time", "echo"]
+    }
+  ],
+  "models": [
+    {
+      "id": "gpt4o",
+      "provider": "openai",
+      "modelName": "gpt-4o",
+      "apiKeyEnvVar": "OPENAI_API_KEY"
+    },
+    {
+      "id": "local-llama",
+      "provider": "ollama",
+      "modelName": "llama3.2",
+      "endpoint": "http://localhost:11434"
+    },
+    {
+      "id": "compat",
+      "provider": "openai-compatible",
+      "modelName": "qwen2.5-coder",
+      "endpoint": "http://192.168.1.100:8080/v1",
+      "apiKeyEnvVar": "COMPAT_KEY"
+    }
+  ],
+  "users": [
+    { "id": "alice", "displayName": "Alice" },
+    { "id": "bob", "displayName": "Bob" }
+  ],
+  "sessions": { "directory": "./sessions" },
+  "tools": {
+    "readFile": { "sandboxRoot": "./files" },
+    "httpGet": { "allowlist": ["https://api.github.com", "https://httpbin.org"] }
+  }
+}
