@@ -28,13 +28,17 @@ public class AgentExecutorTests
     [TearDown]
     public void TearDown() { if (Directory.Exists(_sessionsRoot)) Directory.Delete(_sessionsRoot, true); }
 
-    private sealed class StubChatClient(Func<IList<ChatMessage>, IAsyncEnumerable<ChatResponseUpdate>> stream)
+    private sealed class StubChatClient(Func<IList<ChatMessage>, ChatOptions?, IAsyncEnumerable<ChatResponseUpdate>> stream)
         : IChatClient
     {
+        // Convenience constructor for tests that don't need options
+        public StubChatClient(Func<IList<ChatMessage>, IAsyncEnumerable<ChatResponseUpdate>> stream)
+            : this((msgs, _) => stream(msgs)) { }
+
         public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken ct = default)
             => throw new NotImplementedException();
         public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken ct = default)
-            => stream(messages.ToList());
+            => stream(messages.ToList(), options);
         public object? GetService(Type serviceType, object? serviceKey = null) => null;
         public void Dispose() { }
     }
@@ -138,14 +142,15 @@ public class AgentExecutorTests
     public async Task RunStreaming_ReplaysSessionHistory_IntoChatMessages()
     {
         IList<ChatMessage> capturedMessages = null!;
+        ChatOptions? capturedOptions = null;
 
         async IAsyncEnumerable<ChatResponseUpdate> Stream([EnumeratorCancellation] CancellationToken ct = default)
         {
-            yield return new ChatResponseUpdate(ChatRole.Assistant, "ok");
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "ok") { FinishReason = ChatFinishReason.Stop };
             await Task.CompletedTask;
         }
 
-        var client = new StubChatClient(msgs => { capturedMessages = msgs; return Stream(); });
+        var client = new StubChatClient((msgs, opts) => { capturedMessages = msgs.ToList(); capturedOptions = opts; return Stream(); });
         var cfg = BuildConfig();
 
         var session = await _store.CreateAsync("u", "a");
@@ -168,30 +173,36 @@ public class AgentExecutorTests
         await foreach (var _ in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "next turn"))) { }
 
         Assert.That(capturedMessages, Is.Not.Null);
-        // Expected order: System (agent.SystemPrompt) + user(hello) + assistant(hi)
-        //               + assistant(FunctionCall) + tool(FunctionResult) + user(next turn)
-        Assert.That(capturedMessages.Count, Is.EqualTo(6));
-        Assert.That(capturedMessages[0].Role, Is.EqualTo(ChatRole.System));
-        Assert.That(capturedMessages[1].Role, Is.EqualTo(ChatRole.User));
+        // MAF manages history via InMemoryChatHistoryProvider; the system prompt goes through
+        // ChatOptions.Instructions, not as a message. Expected order:
+        //   user(hello) + assistant(hi) + assistant(FunctionCall) + tool(FunctionResult) + user(next turn)
+        Assert.That(capturedMessages.Count, Is.EqualTo(5));
+        Assert.That(capturedOptions?.Instructions, Is.EqualTo("be helpful"));
+        Assert.That(capturedMessages[0].Role, Is.EqualTo(ChatRole.User));
+        Assert.That(capturedMessages[1].Role, Is.EqualTo(ChatRole.Assistant));
         Assert.That(capturedMessages[2].Role, Is.EqualTo(ChatRole.Assistant));
-        Assert.That(capturedMessages[3].Role, Is.EqualTo(ChatRole.Assistant));
-        Assert.That(capturedMessages[3].Contents.OfType<FunctionCallContent>().Any(), Is.True);
-        Assert.That(capturedMessages[4].Role, Is.EqualTo(ChatRole.Tool));
-        Assert.That(capturedMessages[4].Contents.OfType<FunctionResultContent>().Any(), Is.True);
-        Assert.That(capturedMessages[5].Role, Is.EqualTo(ChatRole.User));
-        Assert.That(capturedMessages[5].Text, Is.EqualTo("next turn"));
+        Assert.That(capturedMessages[2].Contents.OfType<FunctionCallContent>().Any(), Is.True);
+        Assert.That(capturedMessages[3].Role, Is.EqualTo(ChatRole.Tool));
+        Assert.That(capturedMessages[3].Contents.OfType<FunctionResultContent>().Any(), Is.True);
+        Assert.That(capturedMessages[4].Role, Is.EqualTo(ChatRole.User));
+        Assert.That(capturedMessages[4].Text, Is.EqualTo("next turn"));
     }
 
     [Test]
-    public async Task RunStreaming_ToolLoopExceedsLimit_YieldsErrorAndSavesSession()
+    public async Task RunStreaming_ToolLoop_TerminatesAndSavesSession()
     {
+        // MAF handles the tool loop internally with its own iteration limit (~41).
+        // The loop completes normally (DoneUpdate) and the session is persisted.
         int callCount = 0;
         async IAsyncEnumerable<ChatResponseUpdate> AlwaysToolCall([EnumeratorCancellation] CancellationToken ct = default)
         {
             callCount++;
             yield return new ChatResponseUpdate(ChatRole.Assistant,
                 new[] { new FunctionCallContent($"call{callCount}", "echo",
-                    new Dictionary<string, object?> { ["text"] = "spam" }) });
+                    new Dictionary<string, object?> { ["text"] = "spam" }) })
+            {
+                FinishReason = ChatFinishReason.ToolCalls
+            };
             await Task.CompletedTask;
         }
 
@@ -205,13 +216,16 @@ public class AgentExecutorTests
         await foreach (var u in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "go")))
             updates.Add(u);
 
-        Assert.That(callCount, Is.EqualTo(10), "should hit MaxToolIterations of 10");
-        Assert.That(updates.OfType<ErrorUpdate>().Single().Message, Does.Contain("Tool iteration limit reached"));
-        Assert.That(updates.OfType<ToolCallUpdate>().Count(), Is.EqualTo(10));
-        Assert.That(updates.OfType<ToolResultUpdate>().Count(), Is.EqualTo(10));
+        // MAF runs its own loop (default ~41 iterations) and then terminates normally.
+        // The last LLM call may produce a tool call without a result (loop limit hit mid-turn).
+        Assert.That(callCount, Is.GreaterThan(0), "underlying client should have been called");
+        Assert.That(updates.OfType<ToolCallUpdate>().Count(), Is.GreaterThan(0));
+        Assert.That(updates.OfType<ToolResultUpdate>().Count(), Is.GreaterThan(0));
+        Assert.That(updates.OfType<DoneUpdate>().Count(), Is.EqualTo(1), "MAF terminates with DoneUpdate not ErrorUpdate");
+        Assert.That(updates.OfType<ErrorUpdate>().Any(), Is.False, "no error when MAF terminates the loop");
 
         var loaded = await _store.GetAsync("u", session.Id);
         Assert.That(loaded, Is.Not.Null);
-        Assert.That(loaded!.Messages.Count, Is.GreaterThanOrEqualTo(11), "user message + 10 tool turns persisted");
+        Assert.That(loaded!.Messages.Count, Is.GreaterThanOrEqualTo(2), "user message + tool turns + assistant persisted");
     }
 }

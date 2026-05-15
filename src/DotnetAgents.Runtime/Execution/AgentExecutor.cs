@@ -7,6 +7,7 @@ using DotnetAgents.Core.Runtime;
 using DotnetAgents.Core.Sessions;
 using DotnetAgents.Runtime.Providers;
 using DotnetAgents.Tools.BuiltIn;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 namespace DotnetAgents.Runtime.Execution;
@@ -17,180 +18,160 @@ public sealed class AgentExecutor(
     ISessionStore sessions,
     BuiltInToolRegistry tools) : IAgentRuntime
 {
-    private const int MaxToolIterations = 10;
-
     public async IAsyncEnumerable<AgentStreamUpdate> RunStreamingAsync(
         AgentRunRequest request, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        Session? session = null;
-        AgentConfig? agent = null;
-        ModelConfig? model = null;
-        IList<AIFunction>? functions = null;
-        string? setupError = null;
-
-        try
-        {
-            session = await sessions.GetAsync(request.UserId, request.SessionId, ct)
-                      ?? throw new InvalidOperationException(
-                          $"Session '{request.SessionId}' not found for user '{request.UserId}'");
-            agent = configurationService.Config.Agents.FirstOrDefault(a => a.Id == session.AgentId)
-                    ?? throw new InvalidOperationException($"Agent '{session.AgentId}' not found in config");
-            model = configurationService.Config.Models.FirstOrDefault(m => m.Id == agent.ModelId)
-                    ?? throw new InvalidOperationException($"Model '{agent.ModelId}' not found in config");
-            functions = tools.Resolve(agent.Tools).ToList();
-        }
-        catch (Exception ex)
-        {
-            setupError = ex.Message;
-        }
-
-        if (setupError is not null)
-        {
-            yield return new ErrorUpdate(setupError);
-            yield break;
-        }
+        // 1. Resolve config + session
+        var (session, agent, model, setupError) = await ResolveSetupAsync(request, ct);
+        if (setupError is not null) { yield return new ErrorUpdate(setupError); yield break; }
 
         using var chatClient = providerFactory.Create(model!);
 
-        var chatMessages = BuildHistory(agent!, session!, request.Message);
-        var newStored = new List<SessionMessage>
+        // 2. Build MAF agent with tools and in-memory history provider
+        var functions = tools.Resolve(agent!.Tools).ToList();
+        var historyProvider = new InMemoryChatHistoryProvider(new InMemoryChatHistoryProviderOptions());
+        var mafAgent = chatClient.AsAIAgent(new ChatClientAgentOptions
+        {
+            ChatHistoryProvider = historyProvider,
+            ChatOptions = new ChatOptions
+            {
+                Instructions = agent.SystemPrompt,
+                Tools = functions.Count > 0 ? functions.Cast<AITool>().ToList() : null
+            }
+        });
+
+        // 3. Create MAF session (client-side history — no conversationId) and seed with existing history
+        AgentSession mafSession;
+        string? sessionError = null;
+        try
+        {
+            mafSession = await ((AIAgent)mafAgent).CreateSessionAsync(ct);
+            var history = BuildMafHistory(session!);
+            if (history.Count > 0) mafSession.SetInMemoryChatHistory(history);
+        }
+        catch (Exception ex)
+        {
+            sessionError = ex.Message;
+            mafSession = null!;
+        }
+        if (sessionError is not null) { yield return new ErrorUpdate(sessionError); yield break; }
+
+        // 4. Stream and map AgentResponseUpdate → AgentStreamUpdate
+        //    Cannot yield inside try/catch, so we collect updates via IAsyncEnumerator.
+        var newMessages = new List<SessionMessage>
         {
             new() { Id = NewId("usr"), Role = "user", Content = request.Message, Timestamp = DateTimeOffset.UtcNow }
         };
 
-        string? finalMessageId = null;
-        var options = functions!.Count > 0
-            ? new ChatOptions { Tools = functions.Cast<AITool>().ToList() }
-            : null;
+        var pendingCalls = new Dictionary<string, (string Name, string Args)>();
+        var assistantText = new StringBuilder();
+        IAsyncEnumerator<AgentResponseUpdate>? enumerator = null;
+        string? streamError = null;
 
-        for (int iter = 0; iter < MaxToolIterations; iter++)
+        try
         {
-            var assistantText = new StringBuilder();
-            var assistantContents = new List<AIContent>();
+            enumerator = mafAgent.RunStreamingAsync(request.Message, mafSession, null, ct)
+                                 .GetAsyncEnumerator(ct);
+        }
+        catch (Exception ex) { streamError = ex.Message; }
 
-            IAsyncEnumerator<ChatResponseUpdate>? e = null;
-            string? streamError = null;
+        if (streamError is not null) { yield return new ErrorUpdate(streamError); yield break; }
+
+        while (true)
+        {
+            AgentResponseUpdate? update = null;
+            bool hasMore;
+            string? iterError = null;
             try
             {
-                e = chatClient.GetStreamingResponseAsync(chatMessages, options, ct).GetAsyncEnumerator(ct);
+                hasMore = await enumerator!.MoveNextAsync();
+                if (hasMore) update = enumerator.Current;
             }
-            catch (Exception ex) { streamError = ex.Message; }
+            catch (Exception ex) { iterError = ex.Message; hasMore = false; }
 
-            if (streamError is not null)
+            if (iterError is not null)
             {
-                yield return new ErrorUpdate(streamError);
+                await enumerator!.DisposeAsync();
+                yield return new ErrorUpdate(iterError);
                 yield break;
             }
 
-            while (true)
+            if (!hasMore) break;
+
+            foreach (var content in update!.Contents)
             {
-                ChatResponseUpdate? update = null;
-                bool hasMore;
-                string? iterError = null;
-                try
+                if (content is TextContent tc && !string.IsNullOrEmpty(tc.Text))
                 {
-                    hasMore = await e!.MoveNextAsync();
-                    if (hasMore) update = e.Current;
+                    assistantText.Append(tc.Text);
+                    yield return new DeltaUpdate(tc.Text);
                 }
-                catch (Exception ex) { iterError = ex.Message; hasMore = false; }
-
-                if (iterError is not null)
+                else if (content is FunctionCallContent fc)
                 {
-                    await e!.DisposeAsync();
-                    yield return new ErrorUpdate(iterError);
-                    yield break;
+                    var argsJson = fc.Arguments is null ? "{}" : JsonSerializer.Serialize(fc.Arguments);
+                    yield return new ToolCallUpdate(fc.CallId, fc.Name, argsJson);
+                    pendingCalls[fc.CallId] = (fc.Name, argsJson);
                 }
-
-                if (!hasMore) break;
-
-                foreach (var content in update!.Contents)
+                else if (content is FunctionResultContent fr)
                 {
-                    assistantContents.Add(content);
-                    if (content is TextContent tc)
+                    var result = fr.Result?.ToString() ?? string.Empty;
+                    var (name, args) = pendingCalls.TryGetValue(fr.CallId, out var p) ? p : (string.Empty, "{}");
+                    yield return new ToolResultUpdate(fr.CallId, name, result);
+                    if (pendingCalls.ContainsKey(fr.CallId))
                     {
-                        assistantText.Append(tc.Text);
-                        yield return new DeltaUpdate(tc.Text);
-                    }
-                    else if (content is FunctionCallContent fc)
-                    {
-                        var argsJson = fc.Arguments is null ? "{}" : JsonSerializer.Serialize(fc.Arguments);
-                        yield return new ToolCallUpdate(fc.CallId, fc.Name, argsJson);
+                        newMessages.Add(new SessionMessage
+                        {
+                            Id = NewId("tool"), Role = "tool",
+                            ToolCalls = [new ToolCallRecord { CallId = fr.CallId, Name = name, Arguments = args, Result = result }],
+                            Timestamp = DateTimeOffset.UtcNow
+                        });
+                        pendingCalls.Remove(fr.CallId);
                     }
                 }
             }
-            await e!.DisposeAsync();
-
-            chatMessages.Add(new ChatMessage(ChatRole.Assistant, assistantContents));
-
-            var calls = assistantContents.OfType<FunctionCallContent>().ToList();
-            if (calls.Count == 0)
-            {
-                var asstId = NewId("ast");
-                newStored.Add(new SessionMessage
-                {
-                    Id = asstId, Role = "assistant",
-                    Content = assistantText.ToString(),
-                    Timestamp = DateTimeOffset.UtcNow
-                });
-                finalMessageId = asstId;
-                break;
-            }
-
-            var toolResults = new List<AIContent>();
-            var toolRecords = new List<ToolCallRecord>();
-            foreach (var call in calls)
-            {
-                var fn = tools.Get(call.Name);
-                string result;
-                if (fn is null) result = $"Error: unknown tool '{call.Name}'";
-                else
-                {
-                    try
-                    {
-                        var args = call.Arguments ?? new Dictionary<string, object?>();
-                        var aiArgs = new AIFunctionArguments(args);
-                        var output = await fn.InvokeAsync(aiArgs, ct);
-                        result = output?.ToString() ?? string.Empty;
-                    }
-                    catch (Exception ex) { result = $"Error: {ex.Message}"; }
-                }
-
-                toolResults.Add(new FunctionResultContent(call.CallId, result));
-                toolRecords.Add(new ToolCallRecord
-                {
-                    CallId = call.CallId, Name = call.Name,
-                    Arguments = call.Arguments is null ? "{}" : JsonSerializer.Serialize(call.Arguments),
-                    Result = result
-                });
-                yield return new ToolResultUpdate(call.CallId, call.Name, result);
-            }
-
-            chatMessages.Add(new ChatMessage(ChatRole.Tool, toolResults));
-            newStored.Add(new SessionMessage
-            {
-                Id = NewId("tool"), Role = "tool",
-                ToolCalls = toolRecords, Timestamp = DateTimeOffset.UtcNow
-            });
         }
+        await enumerator!.DisposeAsync();
+
+        // 5. Save final assistant message and persist session
+        var asstId = NewId("ast");
+        newMessages.Add(new SessionMessage
+        {
+            Id = asstId, Role = "assistant",
+            Content = assistantText.ToString(),
+            Timestamp = DateTimeOffset.UtcNow
+        });
 
         var updated = session! with
         {
             UpdatedAt = DateTimeOffset.UtcNow,
-            Title = session!.Title ?? (request.Message.Length > 60 ? request.Message[..60] + "…" : request.Message),
-            Messages = [.. session.Messages, .. newStored]
+            Title = session.Title ?? (request.Message.Length > 60 ? request.Message[..60] + "…" : request.Message),
+            Messages = [.. session.Messages, .. newMessages]
         };
         await sessions.SaveAsync(updated, ct);
 
-        if (finalMessageId is null) yield return new ErrorUpdate("Tool iteration limit reached");
-        else yield return new DoneUpdate(finalMessageId);
+        yield return new DoneUpdate(asstId);
     }
 
-    private List<ChatMessage> BuildHistory(AgentConfig agent, Session session, string userMessage)
+    private async Task<(Session? session, AgentConfig? agent, ModelConfig? model, string? error)>
+        ResolveSetupAsync(AgentRunRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var session = await sessions.GetAsync(request.UserId, request.SessionId, ct)
+                          ?? throw new InvalidOperationException(
+                              $"Session '{request.SessionId}' not found for user '{request.UserId}'");
+            var agent = configurationService.Config.Agents.FirstOrDefault(a => a.Id == session.AgentId)
+                        ?? throw new InvalidOperationException($"Agent '{session.AgentId}' not found in config");
+            var model = configurationService.Config.Models.FirstOrDefault(m => m.Id == agent.ModelId)
+                        ?? throw new InvalidOperationException($"Model '{agent.ModelId}' not found in config");
+            return (session, agent, model, null);
+        }
+        catch (Exception ex) { return (null, null, null, ex.Message); }
+    }
+
+    /// <summary>Converts stored session messages to MAF chat history (excludes system prompt — MAF handles that via ChatOptions.Instructions).</summary>
+    private static List<ChatMessage> BuildMafHistory(Session session)
     {
         var msgs = new List<ChatMessage>();
-        if (!string.IsNullOrWhiteSpace(agent.SystemPrompt))
-            msgs.Add(new ChatMessage(ChatRole.System, agent.SystemPrompt));
-
         foreach (var m in session.Messages)
         {
             switch (m.Role)
@@ -200,19 +181,15 @@ public sealed class AgentExecutor(
                 case "system":    msgs.Add(new ChatMessage(ChatRole.System, m.Content ?? "")); break;
                 case "tool":
                     if (m.ToolCalls is null) break;
-                    var calls = m.ToolCalls.Select(c => (AIContent)
-                        new FunctionCallContent(c.CallId, c.Name,
+                    msgs.Add(new ChatMessage(ChatRole.Assistant,
+                        m.ToolCalls.Select(c => (AIContent)new FunctionCallContent(c.CallId, c.Name,
                             string.IsNullOrEmpty(c.Arguments) ? null
-                            : JsonSerializer.Deserialize<Dictionary<string, object?>>(c.Arguments))).ToList();
-                    msgs.Add(new ChatMessage(ChatRole.Assistant, calls));
-                    var results = m.ToolCalls.Select(c => (AIContent)
-                        new FunctionResultContent(c.CallId, c.Result)).ToList();
-                    msgs.Add(new ChatMessage(ChatRole.Tool, results));
+                            : JsonSerializer.Deserialize<Dictionary<string, object?>>(c.Arguments))).ToList()));
+                    msgs.Add(new ChatMessage(ChatRole.Tool,
+                        m.ToolCalls.Select(c => (AIContent)new FunctionResultContent(c.CallId, c.Result)).ToList()));
                     break;
             }
         }
-
-        msgs.Add(new ChatMessage(ChatRole.User, userMessage));
         return msgs;
     }
 
