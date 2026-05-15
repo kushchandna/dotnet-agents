@@ -29,7 +29,7 @@ public sealed class AgentExecutor(
 
         // 2. Build MAF agent with tools and in-memory history provider
         var functions = tools.Resolve(agent!.Tools).ToList();
-        var historyProvider = new InMemoryChatHistoryProvider(new InMemoryChatHistoryProviderOptions());
+        var historyProvider = new InMemoryChatHistoryProvider();
         var mafAgent = chatClient.AsAIAgent(new ChatClientAgentOptions
         {
             ChatHistoryProvider = historyProvider,
@@ -45,7 +45,7 @@ public sealed class AgentExecutor(
         string? sessionError = null;
         try
         {
-            mafSession = await ((AIAgent)mafAgent).CreateSessionAsync(ct);
+            mafSession = await mafAgent.CreateSessionAsync(ct);
             var history = BuildMafHistory(session!);
             if (history.Count > 0) mafSession.SetInMemoryChatHistory(history);
         }
@@ -65,17 +65,8 @@ public sealed class AgentExecutor(
 
         var pendingCalls = new Dictionary<string, (string Name, string Args)>();
         var assistantText = new StringBuilder();
-        IAsyncEnumerator<AgentResponseUpdate>? enumerator = null;
-        string? streamError = null;
-
-        try
-        {
-            enumerator = mafAgent.RunStreamingAsync(request.Message, mafSession, null, ct)
+        var enumerator = mafAgent.RunStreamingAsync(request.Message, mafSession, null, ct)
                                  .GetAsyncEnumerator(ct);
-        }
-        catch (Exception ex) { streamError = ex.Message; }
-
-        if (streamError is not null) { yield return new ErrorUpdate(streamError); yield break; }
 
         while (true)
         {
@@ -114,10 +105,12 @@ public sealed class AgentExecutor(
                 else if (content is FunctionResultContent fr)
                 {
                     var result = fr.Result?.ToString() ?? string.Empty;
-                    var (name, args) = pendingCalls.TryGetValue(fr.CallId, out var p) ? p : (string.Empty, "{}");
-                    yield return new ToolResultUpdate(fr.CallId, name, result);
-                    if (pendingCalls.ContainsKey(fr.CallId))
+                    var name = string.Empty;
+                    var args = "{}";
+                    if (pendingCalls.TryGetValue(fr.CallId, out var p))
                     {
+                        name = p.Name;
+                        args = p.Args;
                         newMessages.Add(new SessionMessage
                         {
                             Id = NewId("tool"), Role = "tool",
@@ -126,6 +119,7 @@ public sealed class AgentExecutor(
                         });
                         pendingCalls.Remove(fr.CallId);
                     }
+                    yield return new ToolResultUpdate(fr.CallId, name, result);
                 }
             }
         }
@@ -178,7 +172,6 @@ public sealed class AgentExecutor(
             {
                 case "user":      msgs.Add(new ChatMessage(ChatRole.User, m.Content ?? "")); break;
                 case "assistant": msgs.Add(new ChatMessage(ChatRole.Assistant, m.Content ?? "")); break;
-                case "system":    msgs.Add(new ChatMessage(ChatRole.System, m.Content ?? "")); break;
                 case "tool":
                     if (m.ToolCalls is null) break;
                     msgs.Add(new ChatMessage(ChatRole.Assistant,

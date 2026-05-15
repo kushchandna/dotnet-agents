@@ -191,7 +191,7 @@ public class AgentExecutorTests
     [Test]
     public async Task RunStreaming_ToolLoop_TerminatesAndSavesSession()
     {
-        // MAF handles the tool loop internally with its own iteration limit (~41).
+        // MAF handles the tool loop internally with its own iteration limit.
         // The loop completes normally (DoneUpdate) and the session is persisted.
         int callCount = 0;
         async IAsyncEnumerable<ChatResponseUpdate> AlwaysToolCall([EnumeratorCancellation] CancellationToken ct = default)
@@ -216,7 +216,7 @@ public class AgentExecutorTests
         await foreach (var u in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "go")))
             updates.Add(u);
 
-        // MAF runs its own loop (default ~41 iterations) and then terminates normally.
+        // MAF runs its own loop and then terminates normally.
         // The last LLM call may produce a tool call without a result (loop limit hit mid-turn).
         Assert.That(callCount, Is.GreaterThan(0), "underlying client should have been called");
         Assert.That(updates.OfType<ToolCallUpdate>().Count(), Is.GreaterThan(0));
