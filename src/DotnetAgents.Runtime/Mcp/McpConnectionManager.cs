@@ -38,16 +38,16 @@ public sealed class McpConnectionManager(
         catch (OperationCanceledException) { /* timeout — continue with dispose */ }
         catch (Exception) { /* loop exceptions are swallowed on stop */ }
 
+        // Fix 5: collect and await dispose tasks instead of fire-and-forget
+        var disposeTasks = new List<Task>();
         foreach (var runtime in runtimes)
         {
-            lock (runtime.Lock)
-            {
-                var client = runtime.Client;
-                runtime.Client = null;
-                if (client is not null)
-                    _ = client.DisposeAsync().AsTask();
-            }
+            IMcpClientHandle? client;
+            lock (runtime.Lock) { client = runtime.Client; runtime.Client = null; }
+            if (client is not null)
+                disposeTasks.Add(SafeDisposeAsync(client));
         }
+        await Task.WhenAll(disposeTasks).WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
     }
 
     // ── IMcpConnectionManager ─────────────────────────────────────────────────
@@ -77,18 +77,22 @@ public sealed class McpConnectionManager(
         if (!_runtimes.TryGetValue(serverId, out var runtime))
             return;
 
-        if (runtime.State == McpServerState.Disabled)
-            return;
+        // Fix 4: read State inside lock
+        bool disabled;
+        lock (runtime.Lock) { disabled = runtime.State == McpServerState.Disabled; }
+        if (disabled) return;
 
         await CancelAndWaitAsync(runtime);
 
+        // Fix 3: CancelAndWaitAsync already set a fresh Cts; only reset transient state here
+        // Fix 7: clear the previous error so it doesn't linger until reconnect
         IMcpClientHandle? oldClient;
         lock (runtime.Lock)
         {
             oldClient = runtime.Client;
             runtime.Client = null;
             runtime.RetryAttempt = 0;
-            runtime.Cts = new CancellationTokenSource();
+            runtime.Error = null;
         }
 
         if (oldClient is not null)
@@ -145,11 +149,18 @@ public sealed class McpConnectionManager(
             _                            => []
         };
 
-        return visible
-            .Select(id => _runtimes.TryGetValue(id, out var r) ? r : null)
-            .Where(r => r is { State: McpServerState.Connected })
-            .SelectMany(r => r!.Tools)
-            .ToList();
+        // Fix 2: snapshot both State and Tools atomically under lock to avoid torn reads
+        var result = new List<AIFunction>();
+        foreach (var id in visible)
+        {
+            if (!_runtimes.TryGetValue(id, out var r)) continue;
+            lock (r.Lock)
+            {
+                if (r.State == McpServerState.Connected)
+                    result.AddRange(r.Tools);
+            }
+        }
+        return result;
     }
 
     // ── Internal helpers ──────────────────────────────────────────────────────
@@ -169,7 +180,10 @@ public sealed class McpConnectionManager(
 
         while (!ct.IsCancellationRequested)
         {
-            SetState(runtime, McpServerState.Connecting, error: runtime.Error, tools: []);
+            // Fix 6: snapshot Error under lock before using it in SetState
+            string? prevError;
+            lock (runtime.Lock) { prevError = runtime.Error; }
+            SetState(runtime, McpServerState.Connecting, error: prevError, tools: []);
 
             lock (runtime.Lock) runtime.RetryAttempt = 0;
 
@@ -246,12 +260,13 @@ public sealed class McpConnectionManager(
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                // Connection dropped — dispose and loop back to retry
+                // Fix 8: set State and Error atomically in the same lock block
                 IMcpClientHandle? dropped;
                 lock (runtime.Lock)
                 {
                     dropped = runtime.Client;
                     runtime.Client = null;
+                    runtime.State = McpServerState.Connecting;
                     runtime.Error = $"Connection lost: {ex.Message}";
                 }
                 if (dropped is not null) await SafeDisposeAsync(dropped);

@@ -9,6 +9,8 @@ public sealed class McpClientFactory(ILoggerFactory loggerFactory) : IMcpClientF
 {
     public async Task<IMcpClientHandle> CreateAsync(McpServerConfig cfg, CancellationToken ct)
     {
+        // Fix 9: dispose transport on failure (HttpClientTransport is IAsyncDisposable;
+        // StdioClientTransport implements neither IDisposable nor IAsyncDisposable in SDK 1.2.0).
         IClientTransport transport = cfg.Command is not null
             ? new StdioClientTransport(new StdioClientTransportOptions
             {
@@ -24,8 +26,17 @@ public sealed class McpClientFactory(ILoggerFactory loggerFactory) : IMcpClientF
                 TransportMode = HttpTransportMode.AutoDetect
             }, loggerFactory);
 
-        var client = await McpClient.CreateAsync(transport, cancellationToken: ct);
-        return new McpClientHandle(client);
+        try
+        {
+            var client = await McpClient.CreateAsync(transport, cancellationToken: ct);
+            return new McpClientHandle(client);
+        }
+        catch
+        {
+            if (transport is IAsyncDisposable adisp) try { await adisp.DisposeAsync(); } catch { }
+            else if (transport is IDisposable disp) try { disp.Dispose(); } catch { }
+            throw;
+        }
     }
 
     private sealed class McpClientHandle(McpClient client) : IMcpClientHandle
