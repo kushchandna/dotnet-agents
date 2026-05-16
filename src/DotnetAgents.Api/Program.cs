@@ -33,6 +33,7 @@ UsersEndpoints.Map(app);
 AgentsEndpoints.Map(app);
 SessionsEndpoints.Map(app);
 MessagesEndpoints.Map(app);
+ToolsEndpoints.Map(app);
 
 app.Run();
 

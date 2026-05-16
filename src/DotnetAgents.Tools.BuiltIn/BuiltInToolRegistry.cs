@@ -21,4 +21,6 @@ public sealed class BuiltInToolRegistry
 
     public IReadOnlyList<AIFunction> Resolve(IEnumerable<string> toolIds) =>
         toolIds.Select(Get).Where(f => f is not null).Select(f => f!).ToList();
+
+    public IReadOnlyList<string> GetAvailableToolIds() => [.. _functions.Keys];
 }
