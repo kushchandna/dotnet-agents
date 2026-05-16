@@ -34,6 +34,7 @@ AgentsEndpoints.Map(app);
 SessionsEndpoints.Map(app);
 MessagesEndpoints.Map(app);
 ToolsEndpoints.Map(app);
+ConfigEndpoints.Map(app);
 
 app.Run();
 
