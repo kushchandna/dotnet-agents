@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import { UsersTab } from './settings/UsersTab';
+import { AgentsTab } from './settings/AgentsTab';
+import { McpServersTab } from './settings/McpServersTab';
+import { ToolsTab } from './settings/ToolsTab';
 
 type Tab = 'users' | 'agents' | 'mcp-servers' | 'tools';
 
@@ -37,10 +41,10 @@ export function SettingsPage({ onClose }: Props) {
         ))}
       </div>
       <div className="settings-content">
-        {activeTab === 'users' && <div data-testid="tab-users">Users tab — coming soon</div>}
-        {activeTab === 'agents' && <div data-testid="tab-agents">Agents tab — coming soon</div>}
-        {activeTab === 'mcp-servers' && <div data-testid="tab-mcp-servers">MCP Servers tab — coming soon</div>}
-        {activeTab === 'tools' && <div data-testid="tab-tools">Built-in Tools tab — coming soon</div>}
+        {activeTab === 'users' && <div data-testid="tab-users"><UsersTab /></div>}
+        {activeTab === 'agents' && <div data-testid="tab-agents"><AgentsTab /></div>}
+        {activeTab === 'mcp-servers' && <div data-testid="tab-mcp-servers"><McpServersTab /></div>}
+        {activeTab === 'tools' && <div data-testid="tab-tools"><ToolsTab /></div>}
       </div>
     </div>
   );
