@@ -68,6 +68,33 @@ public static class ConfigValidator
         if (string.IsNullOrWhiteSpace(cfg.Sessions?.Directory))
             Err("sessions.directory", "is required");
 
+        // MCP servers (optional root registry)
+        var mcpServerIds = new HashSet<string>();
+        for (int i = 0; i < cfg.McpServers.Count; i++)
+        {
+            var s = cfg.McpServers[i];
+            var p = $"mcpServers[{i}]";
+            if (string.IsNullOrWhiteSpace(s.Id)) Err($"{p}.id", "is required");
+            else if (!mcpServerIds.Add(s.Id)) Err($"{p}.id", $"duplicate id '{s.Id}'");
+            if (string.IsNullOrWhiteSpace(s.Command) && string.IsNullOrWhiteSpace(s.Url))
+                Err(p, "must specify either 'command' (stdio) or 'url' (SSE/HTTP)");
+            if (s.RetryLimit < 0) Err($"{p}.retryLimit", "must be ≥ 0");
+            if (s.RetryInterval < 1) Err($"{p}.retryInterval", "must be ≥ 1");
+        }
+
+        // Agent MCP inheritance
+        for (int i = 0; i < cfg.Agents.Count; i++)
+        {
+            var a = cfg.Agents[i];
+            var p = $"agents[{i}]";
+            if (a.McpServersInheritance != Models.McpServersInheritance.Custom && a.McpServers.Count > 0)
+                Err($"{p}.mcpServers", $"non-empty mcpServers list has no effect when mcpServersInheritance is '{a.McpServersInheritance.ToString().ToLowerInvariant()}'; set it to 'custom' or remove the list");
+            if (a.McpServersInheritance == Models.McpServersInheritance.Custom)
+                for (int j = 0; j < a.McpServers.Count; j++)
+                    if (!mcpServerIds.Contains(a.McpServers[j]))
+                        Err($"{p}.mcpServers[{j}]", $"references unknown MCP server '{a.McpServers[j]}'");
+        }
+
         // Tools (optional)
         if (cfg.Tools?.ReadFile is not null && string.IsNullOrWhiteSpace(cfg.Tools.ReadFile.SandboxRoot))
             Err("tools.readFile.sandboxRoot", "is required");

@@ -7,4 +7,5 @@ public record AgentsConfig
     public required IReadOnlyList<UserConfig>  Users  { get; init; }
     public required SessionsConfig             Sessions { get; init; }
     public ToolsConfig?                        Tools { get; init; }
+    public IReadOnlyList<McpServerConfig>      McpServers { get; init; } = [];
 }
