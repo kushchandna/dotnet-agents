@@ -16,6 +16,7 @@ var configPath = cliConfigPath
 
 var config = await ConfigLoader.LoadAsync(configPath);
 builder.Services.AddDotnetAgents(config);
+builder.Services.AddSingleton<IConfigSaver>(_ => new ConfigSaver(configPath));
 builder.Services.AddOpenApi();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
