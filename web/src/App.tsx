@@ -15,7 +15,7 @@ export default function App() {
   const [userId, setUserId] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
 
   useEffect(() => {
     fetch('/api/users').then((r) => r.json()).then(setUsers);
