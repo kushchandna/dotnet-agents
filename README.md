@@ -33,9 +33,18 @@ npm run dev
 
 Open `http://localhost:5173` (or `http://<host-ip>:5173` from another machine on your LAN).
 
+## Settings UI
+
+The web UI includes a settings page (gear icon in the sidebar) for managing configuration without editing `config.json` directly. Changes are persisted to disk immediately and take effect for new sessions.
+
+- **Users** — add, edit, and delete users
+- **Agents** — full CRUD with system prompt, built-in tool selection, and MCP server inheritance (all / none / custom)
+- **MCP Servers** — add stdio (command + args + env vars) or SSE/HTTP (URL) servers
+- **Built-in Tools** — read-only list of available tools
+
 ## Restarting the API
 
-After editing `config.json`, restart the API to pick up the changes:
+After manually editing `config.json`, restart the API to pick up the changes:
 
 ```bash
 ./restart-api.sh                      # uses config.json by default
@@ -68,12 +77,15 @@ See `samples/config.example.json` for a full example and `samples/config.schema.
 
 ## Endpoints
 
+**Chat**
+
 | Method | Route                                                  |
 |--------|--------------------------------------------------------|
 | GET    | `/health`                                              |
 | GET    | `/api/users`                                           |
 | GET    | `/api/agents`                                          |
 | GET    | `/api/agents/{agentId}`                                |
+| GET    | `/api/tools`                                           |
 | GET    | `/api/users/{userId}/sessions`                         |
 | POST   | `/api/users/{userId}/sessions`                         |
 | GET    | `/api/users/{userId}/sessions/{sessionId}`             |
@@ -81,7 +93,26 @@ See `samples/config.example.json` for a full example and `samples/config.schema.
 | GET    | `/api/users/{userId}/sessions/{sessionId}/messages`    |
 | POST   | `/api/users/{userId}/sessions/{sessionId}/messages`    |
 
-The POST `/messages` endpoint returns `text/event-stream` with `data: {...}\n\n` events of type `delta`, `tool_call`, `tool_result`, `done`, or `error`. OpenAPI spec is served at `/openapi/v1.json`.
+The POST `/messages` endpoint returns `text/event-stream` with `data: {...}\n\n` events of type `delta`, `tool_call`, `tool_result`, `done`, or `error`.
+
+**Configuration (settings UI)**
+
+| Method | Route                          |
+|--------|--------------------------------|
+| GET    | `/api/config/agents`           |
+| POST   | `/api/config/agents`           |
+| PUT    | `/api/config/agents/{id}`      |
+| DELETE | `/api/config/agents/{id}`      |
+| GET    | `/api/config/users`            |
+| POST   | `/api/config/users`            |
+| PUT    | `/api/config/users/{id}`       |
+| DELETE | `/api/config/users/{id}`       |
+| GET    | `/api/config/mcp-servers`      |
+| POST   | `/api/config/mcp-servers`      |
+| PUT    | `/api/config/mcp-servers/{id}` |
+| DELETE | `/api/config/mcp-servers/{id}` |
+
+All config mutations validate the new state and persist changes to `config.json`. OpenAPI spec is served at `/openapi/v1.json`.
 
 ## Ports
 
@@ -114,18 +145,3 @@ cd web && npx playwright install --with-deps chromium
 
 The Playwright config boots the API and Vite dev server automatically.
 
-## Project layout
-
-```
-src/
-├── DotnetAgents.Core/        Domain models, config, session store, runtime interfaces
-├── DotnetAgents.Tools.BuiltIn/   Built-in tools and registry
-├── DotnetAgents.Runtime/     Provider factory, agent executor (Microsoft.Agents.AI)
-└── DotnetAgents.Api/         Minimal API, SSE streaming, OpenAPI
-web/                          React 18 + Vite 6 + TypeScript UI
-samples/
-├── ConsoleSample/            In-process façade demo
-├── config.example.json       Example configuration
-└── config.schema.json        JSON Schema for IDE validation
-tests/                        NUnit fixtures for each project
-```
