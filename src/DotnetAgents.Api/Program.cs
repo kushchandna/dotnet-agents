@@ -1,8 +1,13 @@
+using System.Text.Json.Serialization;
 using DotnetAgents.Api.Endpoints;
 using DotnetAgents.Core.Configuration;
 using DotnetAgents.Runtime;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.ConfigureHttpJsonOptions(opts =>
+    opts.SerializerOptions.Converters.Add(
+        new JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.KebabCaseLower)));
 
 // Config path resolution: --config CLI > DOTNET_AGENTS_CONFIG env > appsettings AgentsConfigPath > ./config.json
 string? cliConfigPath = null;

@@ -14,7 +14,7 @@ public class ConfigEndpointTests
     public async Task GetConfigAgents_ReturnsConfiguredAgents()
     {
         await using var f = ApiTestFactory.Create();
-        var agents = await f.CreateClient().GetFromJsonAsync<AgentSettingsDto[]>("/api/config/agents");
+        var agents = await f.CreateClient().GetFromJsonAsync<AgentSettingsDto[]>("/api/config/agents", ApiTestFactory.TestJsonOptions);
         Assert.That(agents, Is.Not.Null);
         Assert.That(agents!.Single().Id, Is.EqualTo("assistant"));
     }
@@ -47,7 +47,7 @@ public class ConfigEndpointTests
         var post = await client.PostAsJsonAsync("/api/config/agents", req);
         Assert.That((int)post.StatusCode, Is.EqualTo(201));
 
-        var agents = await client.GetFromJsonAsync<AgentSettingsDto[]>("/api/config/agents");
+        var agents = await client.GetFromJsonAsync<AgentSettingsDto[]>("/api/config/agents", ApiTestFactory.TestJsonOptions);
         Assert.That(agents!.Any(a => a.Id == "coder"), Is.True);
     }
 
@@ -79,7 +79,7 @@ public class ConfigEndpointTests
         var put = await client.PutAsJsonAsync("/api/config/agents/assistant", req);
         Assert.That((int)put.StatusCode, Is.EqualTo(200));
 
-        var agents = await client.GetFromJsonAsync<AgentSettingsDto[]>("/api/config/agents");
+        var agents = await client.GetFromJsonAsync<AgentSettingsDto[]>("/api/config/agents", ApiTestFactory.TestJsonOptions);
         Assert.That(agents!.Single(a => a.Id == "assistant").Name, Is.EqualTo("Renamed Assistant"));
     }
 
@@ -102,7 +102,7 @@ public class ConfigEndpointTests
         var del = await client.DeleteAsync("/api/config/agents/a1");
         Assert.That((int)del.StatusCode, Is.EqualTo(204));
 
-        var agents = await client.GetFromJsonAsync<AgentSettingsDto[]>("/api/config/agents");
+        var agents = await client.GetFromJsonAsync<AgentSettingsDto[]>("/api/config/agents", ApiTestFactory.TestJsonOptions);
         Assert.That(agents!.Any(a => a.Id == "a1"), Is.False);
     }
 

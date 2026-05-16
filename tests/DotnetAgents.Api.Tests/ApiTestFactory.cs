@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DotnetAgents.Core.Models;
 using DotnetAgents.Core.Runtime;
 using Microsoft.AspNetCore.Hosting;
@@ -10,6 +11,11 @@ namespace DotnetAgents.Api.Tests;
 
 public static class ApiTestFactory
 {
+    public static readonly JsonSerializerOptions TestJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.KebabCaseLower) }
+    };
+
     public static WebApplicationFactory<Program> Create(
         AgentsConfig? config = null, IAgentRuntime? runtime = null)
     {
