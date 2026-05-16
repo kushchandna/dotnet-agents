@@ -30,7 +30,6 @@ export function ChatView({ userId, sessionId, initialMessages = [] }: Props) {
       if (tc) tc.result = e.result;
     } else if (e.type === 'done') {
       const toolCalls = pendingToolCallsRef.current.length > 0 ? [...pendingToolCallsRef.current] : null;
-      console.log('[ChatView] done fired — content length:', streamingRef.current.length, 'toolCalls:', toolCalls?.length ?? 0);
       setMessages((ms) => [...ms, { id: e.messageId, role: 'assistant', content: streamingRef.current, toolCalls }]);
       streamingRef.current = '';
       pendingToolCallsRef.current = [];
@@ -49,7 +48,8 @@ export function ChatView({ userId, sessionId, initialMessages = [] }: Props) {
     cancel();
     const ac = new AbortController();
     fetch(`/api/users/${userId}/sessions/${sessionId}/messages`, { signal: ac.signal })
-      .then((r) => r.json()).then(setMessages).catch((err) => {
+      .then((r) => r.json()).then(setMessages)
+      .catch((err) => {
         if ((err as Error).name !== 'AbortError') setMessages([]);
       });
     streamingRef.current = '';
@@ -85,8 +85,13 @@ export function ChatView({ userId, sessionId, initialMessages = [] }: Props) {
         <input value={input} onChange={(e) => setInput(e.target.value)}
                placeholder="Type a message…" disabled={streaming}
                data-testid="message-input" aria-label="Message input" />
-        <button type="submit" disabled={streaming || !input.trim()} data-testid="send-button">Send</button>
-        {streaming && <button type="button" onClick={cancel} data-testid="cancel-button">Cancel</button>}
+        <button type="submit" disabled={streaming || !input.trim()} className="btn-send" data-testid="send-button" aria-label="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+        {streaming && <button type="button" onClick={cancel} className="btn-cancel" data-testid="cancel-button">Stop</button>}
       </form>
     </div>
   );

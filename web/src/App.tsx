@@ -15,6 +15,7 @@ export default function App() {
   const [userId, setUserId] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     fetch('/api/users').then((r) => r.json()).then(setUsers);
@@ -35,6 +36,7 @@ export default function App() {
     const s: Session = await r.json();
     setSessions((xs) => [s, ...xs]);
     setSessionId(s.id);
+    setSidebarOpen(false);
   };
 
   const handleDelete = async (sid: string) => {
@@ -44,23 +46,64 @@ export default function App() {
     if (sessionId === sid) setSessionId(null);
   };
 
+  const handleSelectSession = (sid: string) => {
+    setSessionId(sid);
+    setSidebarOpen(false);
+  };
+
+  const activeSession = sessions.find((s) => s.id === sessionId);
+
   return (
     <div className="app-layout" data-testid="app">
-      <aside className="sidebar">
-        <UserPicker  users={users}   selectedUserId={userId}   onSelect={setUserId} />
+
+      <header className="mobile-header">
+        <button
+          className="icon-btn"
+          onClick={() => setSidebarOpen((o) => !o)}
+          aria-label="Toggle menu"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            {sidebarOpen
+              ? <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>
+              : <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>}
+          </svg>
+        </button>
+        <span className="mobile-header-title">
+          {activeSession?.title ?? (sessionId ? 'Chat' : 'dotnet-agents')}
+        </span>
+        <div style={{ width: 36 }} />
+      </header>
+
+      <div
+        className={`sidebar-backdrop${sidebarOpen ? ' open' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+
+      <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
+        <div className="sidebar-brand">dotnet · agents</div>
+        <UserPicker users={users} selectedUserId={userId} onSelect={setUserId} />
         <AgentPicker agents={agents} selectedAgentId={agentId} onSelect={setAgentId} />
-        <SessionList sessions={sessions} activeSessionId={sessionId}
-                     onSelect={setSessionId} onNew={handleNew} onDelete={handleDelete} />
+        <SessionList
+          sessions={sessions}
+          activeSessionId={sessionId}
+          onSelect={handleSelectSession}
+          onNew={handleNew}
+          onDelete={handleDelete}
+        />
       </aside>
+
       <main className="chat-area">
         {userId && sessionId ? (
           <ChatView userId={userId} sessionId={sessionId} />
         ) : (
           <div className="empty-state" data-testid="empty-state">
-            Select a user, agent, and session to start chatting.
+            <div className="empty-state-icon">◈</div>
+            <p>No session selected</p>
+            <span>Pick a user and agent, then create or select a session from the sidebar</span>
           </div>
         )}
       </main>
+
     </div>
   );
 }
