@@ -233,6 +233,76 @@ public static class ConfigEndpoints
             return Results.NoContent();
         }).WithName("DeleteConfigMcpServer").WithOpenApi();
 
+        // ── Models ───────────────────────────────────────────────────────────
+
+        app.MapGet("/api/config/models", (IConfigurationService cfg) =>
+            cfg.Config.Models.Select(ToDto).ToArray())
+           .WithName("ListConfigModels").WithOpenApi();
+
+        app.MapPost("/api/config/models", async (
+            UpsertModelRequest req,
+            IConfigurationService cfg,
+            IConfigSaver saver,
+            CancellationToken ct) =>
+        {
+            if (cfg.Config.Models.Any(m => m.Id == req.Id))
+                return Results.Conflict(new { message = $"Model '{req.Id}' already exists." });
+
+            var newModels = cfg.Config.Models.Append(FromRequest(req)).ToList();
+            var newConfig = cfg.Config with { Models = newModels };
+            var errors = ConfigValidator.Validate(newConfig);
+            if (errors.Count > 0)
+                return Results.BadRequest(errors.Select(e => new { e.Path, e.Message }));
+
+            cfg.Update(newConfig);
+            await saver.SaveAsync(newConfig, ct);
+            return Results.Created($"/api/config/models/{req.Id}", ToDto(FromRequest(req)));
+        }).WithName("CreateConfigModel").WithOpenApi();
+
+        app.MapPut("/api/config/models/{id}", async (
+            string id,
+            UpsertModelRequest req,
+            IConfigurationService cfg,
+            IConfigSaver saver,
+            CancellationToken ct) =>
+        {
+            if (!cfg.Config.Models.Any(m => m.Id == id))
+                return Results.NotFound();
+
+            var updatedModel = FromRequest(req) with { Id = id };
+            var newModels = cfg.Config.Models
+                .Select(m => m.Id == id ? updatedModel : m)
+                .ToList();
+            var newConfig = cfg.Config with { Models = newModels };
+            var errors = ConfigValidator.Validate(newConfig);
+            if (errors.Count > 0)
+                return Results.BadRequest(errors.Select(e => new { e.Path, e.Message }));
+
+            cfg.Update(newConfig);
+            await saver.SaveAsync(newConfig, ct);
+            return Results.Ok(ToDto(updatedModel));
+        }).WithName("UpdateConfigModel").WithOpenApi();
+
+        app.MapDelete("/api/config/models/{id}", async (
+            string id,
+            IConfigurationService cfg,
+            IConfigSaver saver,
+            CancellationToken ct) =>
+        {
+            if (!cfg.Config.Models.Any(m => m.Id == id))
+                return Results.NotFound();
+
+            var newModels = cfg.Config.Models.Where(m => m.Id != id).ToList();
+            var newConfig = cfg.Config with { Models = newModels };
+            var errors = ConfigValidator.Validate(newConfig);
+            if (errors.Count > 0)
+                return Results.BadRequest(errors.Select(e => new { e.Path, e.Message }));
+
+            cfg.Update(newConfig);
+            await saver.SaveAsync(newConfig, ct);
+            return Results.NoContent();
+        }).WithName("DeleteConfigModel").WithOpenApi();
+
         app.MapPost("/api/config/mcp-servers/{id}/retry", async (
             string id,
             IConfigurationService cfg,
@@ -276,5 +346,17 @@ public static class ConfigEndpoints
         Enabled = r.Enabled ?? true,
         RetryLimit = r.RetryLimit ?? 3,
         RetryInterval = r.RetryInterval ?? 5
+    };
+
+    private static ModelSettingsDto ToDto(ModelConfig m) =>
+        new(m.Id, m.Provider, m.ModelName, m.Endpoint, m.ApiKeyEnvVar);
+
+    private static ModelConfig FromRequest(UpsertModelRequest r) => new()
+    {
+        Id = r.Id,
+        Provider = r.Provider,
+        ModelName = r.ModelName,
+        Endpoint = r.Endpoint,
+        ApiKeyEnvVar = r.ApiKeyEnvVar
     };
 }

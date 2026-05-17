@@ -23,3 +23,5 @@ public record UpsertMcpServerRequest(
     bool? Enabled,
     int? RetryLimit,
     int? RetryInterval);
+
+public record UpsertModelRequest(string Id, ModelProvider Provider, string ModelName, string? Endpoint, string? ApiKeyEnvVar);
