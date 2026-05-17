@@ -171,7 +171,7 @@ public class ConfigEndpointTests
     [Test]
     public async Task PostConfigMcpServer_CreatesStdioServer()
     {
-        await using var f = ApiTestFactory.Create();
+        await using var f = ApiTestFactory.Create(mcpManager: Substitute.For<IMcpConnectionManager>());
         var client = f.CreateClient();
 
         var req = new UpsertMcpServerRequest("fs", "npx", ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"], null, null, null, null, null);
@@ -185,7 +185,7 @@ public class ConfigEndpointTests
     [Test]
     public async Task PostConfigMcpServer_NeitherCommandNorUrl_Returns400()
     {
-        await using var f = ApiTestFactory.Create();
+        await using var f = ApiTestFactory.Create(mcpManager: Substitute.For<IMcpConnectionManager>());
         var req = new UpsertMcpServerRequest("bad", null, null, null, null, null, null, null);
         var resp = await f.CreateClient().PostAsJsonAsync("/api/config/mcp-servers", req);
         Assert.That((int)resp.StatusCode, Is.EqualTo(400));
