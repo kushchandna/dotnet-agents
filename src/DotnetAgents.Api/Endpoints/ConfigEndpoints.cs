@@ -248,7 +248,8 @@ public static class ConfigEndpoints
             if (cfg.Config.Models.Any(m => m.Id == req.Id))
                 return Results.Conflict(new { message = $"Model '{req.Id}' already exists." });
 
-            var newModels = cfg.Config.Models.Append(FromRequest(req)).ToList();
+            var newModel = FromRequest(req);
+            var newModels = cfg.Config.Models.Append(newModel).ToList();
             var newConfig = cfg.Config with { Models = newModels };
             var errors = ConfigValidator.Validate(newConfig);
             if (errors.Count > 0)
@@ -256,7 +257,7 @@ public static class ConfigEndpoints
 
             cfg.Update(newConfig);
             await saver.SaveAsync(newConfig, ct);
-            return Results.Created($"/api/config/models/{req.Id}", ToDto(FromRequest(req)));
+            return Results.Created($"/api/config/models/{req.Id}", ToDto(newModel));
         }).WithName("CreateConfigModel").WithOpenApi();
 
         app.MapPut("/api/config/models/{id}", async (
