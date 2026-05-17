@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import { UsersTab } from './settings/UsersTab';
 import { AgentsTab } from './settings/AgentsTab';
+import { ModelsTab } from './settings/ModelsTab';
 import { McpServersTab } from './settings/McpServersTab';
 import { ToolsTab } from './settings/ToolsTab';
 
-type Tab = 'users' | 'agents' | 'mcp-servers' | 'tools';
+type Tab = 'users' | 'agents' | 'models' | 'mcp-servers' | 'tools';
 
 interface Props { onClose: () => void }
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'users', label: 'Users' },
   { id: 'agents', label: 'Agents' },
+  { id: 'models', label: 'Models' },
   { id: 'mcp-servers', label: 'MCP Servers' },
   { id: 'tools', label: 'Built-in Tools' },
 ];
@@ -43,6 +45,7 @@ export function SettingsPage({ onClose }: Props) {
       <div className="settings-content">
         {activeTab === 'users' && <div data-testid="tab-users"><UsersTab /></div>}
         {activeTab === 'agents' && <div data-testid="tab-agents"><AgentsTab /></div>}
+        {activeTab === 'models' && <div data-testid="tab-models"><ModelsTab /></div>}
         {activeTab === 'mcp-servers' && <div data-testid="tab-mcp-servers"><McpServersTab /></div>}
         {activeTab === 'tools' && <div data-testid="tab-tools"><ToolsTab /></div>}
       </div>

@@ -6,6 +6,7 @@ interface Agent {
   mcpServersInheritance: 'all' | 'none' | 'custom'; mcpServers: string[];
 }
 interface McpServer { id: string }
+interface Model { id: string; modelName: string }
 interface FormState {
   id: string; name: string; description: string; modelId: string; systemPrompt: string;
   tools: string[]; mcpServersInheritance: 'all' | 'none' | 'custom'; mcpServers: string[];
@@ -16,6 +17,7 @@ export function AgentsTab() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [availableTools, setAvailableTools] = useState<string[]>([]);
   const [availableMcpServers, setAvailableMcpServers] = useState<McpServer[]>([]);
+  const [availableModels, setAvailableModels] = useState<Model[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(empty());
@@ -27,6 +29,7 @@ export function AgentsTab() {
     load();
     fetch('/api/tools').then(r => r.json()).then(setAvailableTools).catch(console.error);
     fetch('/api/config/mcp-servers').then(r => r.json()).then(setAvailableMcpServers).catch(console.error);
+    fetch('/api/config/models').then(r => r.json()).then(setAvailableModels).catch(console.error);
   }, []);
 
   const handleError = async (res: Response) => {
@@ -98,7 +101,25 @@ export function AgentsTab() {
       </div>
       <div className="settings-form-row">
         <label className="settings-form-label">Model ID</label>
-        <input className="settings-input" value={form.modelId} onChange={e => setForm(f => ({ ...f, modelId: e.target.value }))} placeholder="local" />
+        {availableModels.length > 0 ? (
+          <select
+            className="settings-input"
+            value={form.modelId}
+            onChange={e => setForm(f => ({ ...f, modelId: e.target.value }))}
+          >
+            <option value="">-- select model --</option>
+            {availableModels.map(m => (
+              <option key={m.id} value={m.id}>{m.id} ({m.modelName})</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            className="settings-input"
+            value={form.modelId}
+            onChange={e => setForm(f => ({ ...f, modelId: e.target.value }))}
+            placeholder="local"
+          />
+        )}
       </div>
       <div className="settings-form-row">
         <label className="settings-form-label">Description</label>
