@@ -4,6 +4,7 @@ using DotnetAgents.Core.Models;
 using DotnetAgents.Core.Runtime;
 using DotnetAgents.Core.Sessions;
 using DotnetAgents.Runtime.Execution;
+using DotnetAgents.Runtime.Mcp;
 using DotnetAgents.Runtime.Providers;
 using DotnetAgents.Tools.BuiltIn;
 using Microsoft.Extensions.AI;
@@ -72,7 +73,9 @@ public class AgentExecutorTests
         var cfg = BuildConfig();
         var session = await _store.CreateAsync("u", "a");
         var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
-        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry);
+        var mcpManager = Substitute.For<IMcpConnectionManager>();
+        mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([]);
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager);
 
         var updates = new List<AgentStreamUpdate>();
         await foreach (var u in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "Hi")))
@@ -111,7 +114,9 @@ public class AgentExecutorTests
         var cfg = BuildConfig();
         var session = await _store.CreateAsync("u", "a");
         var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
-        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry);
+        var mcpManager = Substitute.For<IMcpConnectionManager>();
+        mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([]);
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager);
 
         var updates = new List<AgentStreamUpdate>();
         await foreach (var u in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "say hi")))
@@ -129,7 +134,9 @@ public class AgentExecutorTests
         var client = Substitute.For<IChatClient>();
         var cfg = BuildConfig();
         var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
-        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry);
+        var mcpManager = Substitute.For<IMcpConnectionManager>();
+        mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([]);
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager);
 
         var updates = new List<AgentStreamUpdate>();
         await foreach (var u in executor.RunStreamingAsync(new AgentRunRequest("u", "missing", "hi")))
@@ -168,7 +175,9 @@ public class AgentExecutorTests
         await _store.SaveAsync(seeded);
 
         var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
-        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry);
+        var mcpManager = Substitute.For<IMcpConnectionManager>();
+        mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([]);
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager);
 
         await foreach (var _ in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "next turn"))) { }
 
@@ -210,7 +219,9 @@ public class AgentExecutorTests
         var cfg = BuildConfig();
         var session = await _store.CreateAsync("u", "a");
         var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
-        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry);
+        var mcpManager = Substitute.For<IMcpConnectionManager>();
+        mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([]);
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager);
 
         var updates = new List<AgentStreamUpdate>();
         await foreach (var u in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "go")))
@@ -227,5 +238,31 @@ public class AgentExecutorTests
         var loaded = await _store.GetAsync("u", session.Id);
         Assert.That(loaded, Is.Not.Null);
         Assert.That(loaded!.Messages.Count, Is.GreaterThanOrEqualTo(2), "user message + tool turns + assistant persisted");
+    }
+
+    [Test]
+    public async Task RunStreamingAsync_MergesMcpToolsWithBuiltInTools()
+    {
+        async IAsyncEnumerable<ChatResponseUpdate> Stream([EnumeratorCancellation] CancellationToken ct = default)
+        {
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "done");
+            await Task.CompletedTask;
+        }
+
+        var client = new StubChatClient(_ => Stream());
+        var cfg = BuildConfig(); // agent has tools: ["echo", "get_current_time"]
+        var session = await _store.CreateAsync("u", "a");
+        var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
+
+        var mcpTool = AIFunctionFactory.Create((string x) => x, "mcpEcho");
+        var mcpManager = Substitute.For<IMcpConnectionManager>();
+        mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([mcpTool]);
+
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager);
+
+        await foreach (var _ in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "hi"))) { }
+
+        // Verify the merge path was exercised: ResolveToolsForAgent was called with the resolved agent
+        mcpManager.Received(1).ResolveToolsForAgent(Arg.Is<AgentConfig>(a => a.Id == "a"));
     }
 }

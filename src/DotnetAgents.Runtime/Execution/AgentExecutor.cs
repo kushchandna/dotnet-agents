@@ -5,6 +5,7 @@ using DotnetAgents.Core.Configuration;
 using DotnetAgents.Core.Models;
 using DotnetAgents.Core.Runtime;
 using DotnetAgents.Core.Sessions;
+using DotnetAgents.Runtime.Mcp;
 using DotnetAgents.Runtime.Providers;
 using DotnetAgents.Tools.BuiltIn;
 using Microsoft.Agents.AI;
@@ -16,7 +17,8 @@ public sealed class AgentExecutor(
     IConfigurationService configurationService,
     IModelProviderFactory providerFactory,
     ISessionStore sessions,
-    BuiltInToolRegistry tools) : IAgentRuntime
+    BuiltInToolRegistry tools,
+    IMcpConnectionManager mcpManager) : IAgentRuntime
 {
     public async IAsyncEnumerable<AgentStreamUpdate> RunStreamingAsync(
         AgentRunRequest request, [EnumeratorCancellation] CancellationToken ct = default)
@@ -28,7 +30,9 @@ public sealed class AgentExecutor(
         using var chatClient = providerFactory.Create(model!);
 
         // 2. Build MAF agent with tools and in-memory history provider
-        var functions = tools.Resolve(agent!.Tools).ToList();
+        var builtIn = tools.Resolve(agent!.Tools);
+        var mcp     = mcpManager.ResolveToolsForAgent(agent);
+        var functions = builtIn.Concat(mcp).ToList();
         var historyProvider = new InMemoryChatHistoryProvider();
         var mafAgent = chatClient.AsAIAgent(new ChatClientAgentOptions
         {
