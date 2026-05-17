@@ -1,6 +1,7 @@
 using DotnetAgents.Api.Dto;
 using DotnetAgents.Core.Configuration;
 using DotnetAgents.Core.Models;
+using DotnetAgents.Runtime.Mcp;
 
 namespace DotnetAgents.Api.Endpoints;
 
@@ -44,8 +45,9 @@ public static class ConfigEndpoints
             if (!cfg.Config.Agents.Any(a => a.Id == id))
                 return Results.NotFound();
 
+            var updatedAgent = FromRequest(req) with { Id = id };
             var newAgents = cfg.Config.Agents
-                .Select(a => a.Id == id ? FromRequest(req) : a)
+                .Select(a => a.Id == id ? updatedAgent : a)
                 .ToList();
             var newConfig = cfg.Config with { Agents = newAgents };
             var errors = ConfigValidator.Validate(newConfig);
@@ -54,7 +56,7 @@ public static class ConfigEndpoints
 
             cfg.Update(newConfig);
             await saver.SaveAsync(newConfig, ct);
-            return Results.Ok(ToDto(FromRequest(req)));
+            return Results.Ok(ToDto(updatedAgent));
         }).WithName("UpdateConfigAgent").WithOpenApi();
 
         app.MapDelete("/api/config/agents/{id}", async (
@@ -114,7 +116,7 @@ public static class ConfigEndpoints
             if (!cfg.Config.Users.Any(u => u.Id == id))
                 return Results.NotFound();
 
-            var updated = new UserConfig { Id = req.Id, DisplayName = req.DisplayName };
+            var updated = new UserConfig { Id = id, DisplayName = req.DisplayName };
             var newUsers = cfg.Config.Users
                 .Select(u => u.Id == id ? updated : u)
                 .ToList();
@@ -125,7 +127,7 @@ public static class ConfigEndpoints
 
             cfg.Update(newConfig);
             await saver.SaveAsync(newConfig, ct);
-            return Results.Ok(new UserDto(req.Id, req.DisplayName));
+            return Results.Ok(new UserDto(id, req.DisplayName));
         }).WithName("UpdateConfigUser").WithOpenApi();
 
         app.MapDelete("/api/config/users/{id}", async (
@@ -150,6 +152,13 @@ public static class ConfigEndpoints
 
         // ── MCP Servers ──────────────────────────────────────────────────────
 
+        // status must be declared before {id} routes to avoid parameter matching
+        app.MapGet("/api/config/mcp-servers/status", (IMcpConnectionManager mcpManager) =>
+            mcpManager.GetStatus()
+                .Select(s => new McpServerStatusDto(s.Id, s.State, s.Error, s.LastConnectedAt, s.RetryAttempt, s.ToolNames))
+                .ToArray())
+           .WithName("GetMcpServerStatuses").WithOpenApi();
+
         app.MapGet("/api/config/mcp-servers", (IConfigurationService cfg) =>
             cfg.Config.McpServers.Select(ToDto).ToArray())
            .WithName("ListConfigMcpServers").WithOpenApi();
@@ -158,6 +167,7 @@ public static class ConfigEndpoints
             UpsertMcpServerRequest req,
             IConfigurationService cfg,
             IConfigSaver saver,
+            IMcpConnectionManager mcpManager,
             CancellationToken ct) =>
         {
             if (cfg.Config.McpServers.Any(s => s.Id == req.Id))
@@ -171,6 +181,7 @@ public static class ConfigEndpoints
 
             cfg.Update(newConfig);
             await saver.SaveAsync(newConfig, ct);
+            await mcpManager.ReconfigureAsync(newConfig, ct);
             return Results.Created($"/api/config/mcp-servers/{req.Id}", ToDto(FromRequest(req)));
         }).WithName("CreateConfigMcpServer").WithOpenApi();
 
@@ -179,13 +190,15 @@ public static class ConfigEndpoints
             UpsertMcpServerRequest req,
             IConfigurationService cfg,
             IConfigSaver saver,
+            IMcpConnectionManager mcpManager,
             CancellationToken ct) =>
         {
             if (!cfg.Config.McpServers.Any(s => s.Id == id))
                 return Results.NotFound();
 
+            var updatedServer = FromRequest(req) with { Id = id };
             var newServers = cfg.Config.McpServers
-                .Select(s => s.Id == id ? FromRequest(req) : s)
+                .Select(s => s.Id == id ? updatedServer : s)
                 .ToList();
             var newConfig = cfg.Config with { McpServers = newServers };
             var errors = ConfigValidator.Validate(newConfig);
@@ -194,13 +207,15 @@ public static class ConfigEndpoints
 
             cfg.Update(newConfig);
             await saver.SaveAsync(newConfig, ct);
-            return Results.Ok(ToDto(FromRequest(req)));
+            await mcpManager.ReconfigureAsync(newConfig, ct);
+            return Results.Ok(ToDto(updatedServer));
         }).WithName("UpdateConfigMcpServer").WithOpenApi();
 
         app.MapDelete("/api/config/mcp-servers/{id}", async (
             string id,
             IConfigurationService cfg,
             IConfigSaver saver,
+            IMcpConnectionManager mcpManager,
             CancellationToken ct) =>
         {
             if (!cfg.Config.McpServers.Any(s => s.Id == id))
@@ -208,10 +223,29 @@ public static class ConfigEndpoints
 
             var newServers = cfg.Config.McpServers.Where(s => s.Id != id).ToList();
             var newConfig = cfg.Config with { McpServers = newServers };
+            var errors = ConfigValidator.Validate(newConfig);
+            if (errors.Count > 0)
+                return Results.BadRequest(errors.Select(e => new { e.Path, e.Message }));
+
             cfg.Update(newConfig);
             await saver.SaveAsync(newConfig, ct);
+            await mcpManager.ReconfigureAsync(newConfig, ct);
             return Results.NoContent();
         }).WithName("DeleteConfigMcpServer").WithOpenApi();
+
+        app.MapPost("/api/config/mcp-servers/{id}/retry", async (
+            string id,
+            IConfigurationService cfg,
+            IMcpConnectionManager mcpManager,
+            CancellationToken ct) =>
+        {
+            var server = cfg.Config.McpServers.FirstOrDefault(s => s.Id == id);
+            if (server is null) return Results.NotFound();
+            if (!server.Enabled) return Results.BadRequest(new { message = $"MCP server '{id}' is disabled." });
+
+            await mcpManager.RetryAsync(id, ct);
+            return Results.Accepted();
+        }).WithName("RetryMcpServer").WithOpenApi();
     }
 
     private static AgentSettingsDto ToDto(AgentConfig a) =>
@@ -230,7 +264,7 @@ public static class ConfigEndpoints
     };
 
     private static McpServerDto ToDto(McpServerConfig s) =>
-        new(s.Id, s.Command, s.Args, s.Env, s.Url);
+        new(s.Id, s.Command, s.Args, s.Env, s.Url, s.Enabled, s.RetryLimit, s.RetryInterval);
 
     private static McpServerConfig FromRequest(UpsertMcpServerRequest r) => new()
     {
@@ -238,6 +272,9 @@ public static class ConfigEndpoints
         Command = r.Command,
         Args = r.Args ?? [],
         Env = r.Env ?? new Dictionary<string, string>(),
-        Url = r.Url
+        Url = r.Url,
+        Enabled = r.Enabled ?? true,
+        RetryLimit = r.RetryLimit ?? 3,
+        RetryInterval = r.RetryInterval ?? 5
     };
 }

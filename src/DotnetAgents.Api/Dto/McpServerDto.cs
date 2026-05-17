@@ -5,4 +5,7 @@ public record McpServerDto(
     string? Command,
     IReadOnlyList<string> Args,
     IReadOnlyDictionary<string, string> Env,
-    string? Url);
+    string? Url,
+    bool Enabled,
+    int RetryLimit,
+    int RetryInterval);
