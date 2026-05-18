@@ -5,7 +5,6 @@ export function MessageBubble({ message }: { message: Message }) {
   return (
     <div className={`message-bubble message-${message.role}`} data-testid={`message-${message.id}`}>
       <div className="message-role">{message.role}</div>
-      {message.content && <div className="message-content">{message.content}</div>}
       {message.toolCalls && message.toolCalls.length > 0 && (
         <details className="tool-calls">
           <summary>Tool calls ({message.toolCalls.length})</summary>
@@ -17,6 +16,7 @@ export function MessageBubble({ message }: { message: Message }) {
           ))}
         </details>
       )}
+      {message.content && <div className="message-content">{message.content}</div>}
     </div>
   );
 }

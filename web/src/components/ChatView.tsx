@@ -29,10 +29,11 @@ export function ChatView({ userId, sessionId, initialMessages = [] }: Props) {
       const tc = pendingToolCallsRef.current.find((t) => t.callId === e.callId);
       if (tc) tc.result = e.result;
     } else if (e.type === 'done') {
+      const content = streamingRef.current;
       const toolCalls = pendingToolCallsRef.current.length > 0 ? [...pendingToolCallsRef.current] : null;
-      setMessages((ms) => [...ms, { id: e.messageId, role: 'assistant', content: streamingRef.current, toolCalls }]);
       streamingRef.current = '';
       pendingToolCallsRef.current = [];
+      setMessages((ms) => [...ms, { id: e.messageId, role: 'assistant', content, toolCalls }]);
       setStreamingContent('');
     } else if (e.type === 'error') {
       setMessages((ms) => [...ms, { id: `err-${Date.now()}`, role: 'assistant', content: `Error: ${e.message}` }]);
