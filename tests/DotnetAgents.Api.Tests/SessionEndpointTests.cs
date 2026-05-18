@@ -4,6 +4,12 @@ using DotnetAgents.Api.Dto;
 
 namespace DotnetAgents.Api.Tests;
 
+// Local DTO for deserializing the /raw response
+file record RawResponse(string? SystemPrompt, RawAgent Agent, RawModel Model, MessageDto[] Messages);
+file record RawAgent(string Id, string Name, string? Description, string ModelId,
+    string[] Tools, string[] Skills, string[] McpServers);
+file record RawModel(string Id, string Provider, string ModelName, string? Endpoint);
+
 [TestFixture]
 public class SessionEndpointTests
 {
@@ -74,6 +80,41 @@ public class SessionEndpointTests
     {
         await using var f = ApiTestFactory.Create();
         var resp = await f.CreateClient().GetAsync("/api/users/alice/sessions/missing/messages");
+        Assert.That(resp.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
+    [Test]
+    public async Task GetRaw_ForExistingSession_ReturnsSystemPromptAndAgentAndModelAndMessages()
+    {
+        await using var f = ApiTestFactory.Create();
+        var client = f.CreateClient();
+        var s = await (await client.PostAsJsonAsync("/api/users/alice/sessions", new { agentId = "assistant" }))
+            .Content.ReadFromJsonAsync<SessionDto>();
+        var resp = await client.GetAsync($"/api/users/alice/sessions/{s!.Id}/raw");
+        resp.EnsureSuccessStatusCode();
+        var raw = await resp.Content.ReadFromJsonAsync<RawResponse>(ApiTestFactory.TestJsonOptions);
+        Assert.Multiple(() =>
+        {
+            Assert.That(raw!.Agent.Id, Is.EqualTo("assistant"));
+            Assert.That(raw.Agent.Name, Is.EqualTo("Assistant"));
+            Assert.That(raw.Model.Id, Is.EqualTo("m"));
+            Assert.That(raw.Messages, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task GetRaw_ForMissingSession_Returns404()
+    {
+        await using var f = ApiTestFactory.Create();
+        var resp = await f.CreateClient().GetAsync("/api/users/alice/sessions/missing/raw");
+        Assert.That(resp.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
+    [Test]
+    public async Task GetRaw_ForUnknownUser_Returns404()
+    {
+        await using var f = ApiTestFactory.Create();
+        var resp = await f.CreateClient().GetAsync("/api/users/ghost/sessions/missing/raw");
         Assert.That(resp.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
     }
 }

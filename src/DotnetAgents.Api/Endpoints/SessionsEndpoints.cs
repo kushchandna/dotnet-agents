@@ -50,6 +50,37 @@ public static class SessionsEndpoints
                 var msgs = await store.GetMessagesAsync(userId, sessionId);
                 return Results.Ok(msgs.Select(m => new MessageDto(m.Id, m.Role, m.Content, m.ToolCalls, m.Timestamp)).ToArray());
             }).WithName("ListMessages").WithOpenApi();
+
+        app.MapGet("/api/users/{userId}/sessions/{sessionId}/raw",
+            async (string userId, string sessionId, ISessionStore store, IConfigurationService cfg) =>
+            {
+                var session = await store.GetAsync(userId, sessionId);
+                if (session is null) return Results.NotFound();
+
+                var agent = cfg.Config.Agents.FirstOrDefault(a => a.Id == session.AgentId);
+                if (agent is null) return Results.NotFound();
+
+                var model = cfg.Config.Models.FirstOrDefault(m => m.Id == agent.ModelId);
+                if (model is null) return Results.NotFound();
+
+                IReadOnlyList<string> mcpServers = agent.McpServersInheritance switch
+                {
+                    DotnetAgents.Core.Models.McpServersInheritance.All    => cfg.Config.McpServers.Select(s => s.Id).ToArray(),
+                    DotnetAgents.Core.Models.McpServersInheritance.None   => [],
+                    DotnetAgents.Core.Models.McpServersInheritance.Custom => agent.McpServers,
+                    _                                                      => []
+                };
+
+                var msgs = await store.GetMessagesAsync(userId, sessionId);
+                var dto = new SessionRawDto(
+                    agent.SystemPrompt,
+                    new AgentRawDto(agent.Id, agent.Name, agent.Description, agent.ModelId,
+                        agent.Tools, agent.Skills, mcpServers),
+                    new ModelRawDto(model.Id, model.Provider, model.ModelName, model.Endpoint),
+                    msgs.Select(m => new MessageDto(m.Id, m.Role, m.Content, m.ToolCalls, m.Timestamp)).ToArray());
+
+                return Results.Ok(dto);
+            }).WithName("GetSessionRaw").WithOpenApi();
     }
 
     private static SessionDto ToDto(Session s) =>
