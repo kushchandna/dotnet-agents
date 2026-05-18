@@ -88,7 +88,6 @@ export default function App() {
 
   const handleSelectSession = (sid: string) => {
     setSessionId(sid);
-    setChatView('chat');
     if (!pinned) setSidebarOpen(false);
   };
 
@@ -178,14 +177,18 @@ export default function App() {
         ) : (
           <>
             {userId && sessionId && (
-              <div className="chat-view-tabs" data-testid="chat-view-tabs">
+              <div className="chat-view-tabs" data-testid="chat-view-tabs" role="tablist" aria-label="View">
                 <button
                   className={`chat-view-tab${chatView === 'chat' ? ' active' : ''}`}
                   onClick={() => setChatView('chat')}
+                  role="tab"
+                  aria-selected={chatView === 'chat'}
                 >Chat</button>
                 <button
                   className={`chat-view-tab${chatView === 'raw' ? ' active' : ''}`}
                   onClick={() => setChatView('raw')}
+                  role="tab"
+                  aria-selected={chatView === 'raw'}
                 >Raw</button>
               </div>
             )}

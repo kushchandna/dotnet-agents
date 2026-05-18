@@ -44,6 +44,20 @@ describe('RawView', () => {
     });
   });
 
+  it('renders error message when fetch returns non-ok response', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+    } as Response);
+
+    render(<RawView userId="u1" sessionId="s1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to load raw view/)).toBeInTheDocument();
+      expect(screen.getByText(/HTTP 404/)).toBeInTheDocument();
+    });
+  });
+
   it('calls the correct URL exactly once', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
