@@ -119,6 +119,13 @@ export function ModelsTab() {
           <input className="settings-input" value={form.apiKeyEnvVar} onChange={e => setForm(f => ({ ...f, apiKeyEnvVar: e.target.value }))} placeholder="OPENAI_API_KEY" />
         </div>
       )}
+      {(form.provider === 'gemini' || form.provider === 'anthropic' || form.provider === 'openrouter') && (
+        <div className="settings-form-row">
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>
+            ℹ️ This provider uses an OpenAI-compatible API endpoint.
+          </p>
+        </div>
+      )}
       <div className="settings-form-actions">
         <button className="btn-settings-action" onClick={cancelForm}>Cancel</button>
         <button className="btn-settings-add" onClick={onSave}>Save</button>
