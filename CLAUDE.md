@@ -2,7 +2,7 @@
 
 ## Commit Message Guidelines
 
-Lowercase, imperative, ≤ 72 chars, no trailing period. Omit milestone numbers, emoji, and `Co-authored-by` trailers. Conventional prefixes (`feat:`, `fix:`, `refactor:`, etc.) are optional — match existing `git log` style.
+Lowercase, imperative, ≤ 72 chars, no trailing period. No conventional prefixes (`feat:`, `fix:`, `refactor:`, etc.). No milestone numbers, emoji, or `Co-authored-by` trailers. Short and direct.
 
 ## Workflow Rules
 
