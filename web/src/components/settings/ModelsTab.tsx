@@ -92,14 +92,11 @@ export function ModelsTab() {
       )}
       <div className="settings-form-row">
         <label className="settings-form-label">Provider</label>
-        <div className="settings-radio-group">
-          {(['openai', 'openai-compatible', 'ollama'] as const).map(p => (
-            <label key={p} className="settings-radio-item">
-              <input type="radio" name="provider" value={p} checked={form.provider === p} onChange={() => setForm(f => ({ ...f, provider: p }))} />
-              {p}
-            </label>
-          ))}
-        </div>
+        <select className="settings-input" value={form.provider} onChange={e => setForm(f => ({ ...f, provider: e.target.value as FormState['provider'] }))}>
+          <option value="ollama">ollama</option>
+          <option value="openai">openai</option>
+          <option value="openai-compatible">openai-compatible</option>
+        </select>
       </div>
       <div className="settings-form-row">
         <label className="settings-form-label">Model Name</label>
