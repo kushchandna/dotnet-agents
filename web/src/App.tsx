@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AgentPicker } from './components/AgentPicker';
 import { ChatView } from './components/ChatView';
+import { RawView } from './components/RawView';
 import { SessionList } from './components/SessionList';
 import { SettingsPage } from './components/SettingsPage';
 import { UserPicker } from './components/UserPicker';
@@ -25,6 +26,7 @@ export default function App() {
   const [userId, setUserId] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [chatView, setChatView] = useState<'chat' | 'raw'>('chat');
   const [pinned, setPinned] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem(LS_SIDEBAR_PINNED) === '1';
@@ -52,6 +54,8 @@ export default function App() {
     if (!userId) { setSessions([]); return; }
     fetch(`/api/users/${userId}/sessions`).then((r) => r.json()).then(setSessions);
   }, [userId]);
+
+  useEffect(() => { setChatView('chat'); }, [userId, sessionId]);
 
   const handleSelectUser = (id: string) => {
     setUserId(id);
@@ -84,6 +88,7 @@ export default function App() {
 
   const handleSelectSession = (sid: string) => {
     setSessionId(sid);
+    setChatView('chat');
     if (!pinned) setSidebarOpen(false);
   };
 
@@ -170,14 +175,32 @@ export default function App() {
       <main className="chat-area">
         {route === 'settings' ? (
           <SettingsPage />
-        ) : userId && sessionId ? (
-          <ChatView userId={userId} sessionId={sessionId} />
         ) : (
-          <div className="empty-state" data-testid="empty-state">
-            <div className="empty-state-icon">◈</div>
-            <p>No session selected</p>
-            <span>Pick a user and agent, then create or select a session from the sidebar</span>
-          </div>
+          <>
+            {userId && sessionId && (
+              <div className="chat-view-tabs" data-testid="chat-view-tabs">
+                <button
+                  className={`chat-view-tab${chatView === 'chat' ? ' active' : ''}`}
+                  onClick={() => setChatView('chat')}
+                >Chat</button>
+                <button
+                  className={`chat-view-tab${chatView === 'raw' ? ' active' : ''}`}
+                  onClick={() => setChatView('raw')}
+                >Raw</button>
+              </div>
+            )}
+            {userId && sessionId ? (
+              chatView === 'raw'
+                ? <RawView userId={userId} sessionId={sessionId} />
+                : <ChatView userId={userId} sessionId={sessionId} />
+            ) : (
+              <div className="empty-state" data-testid="empty-state">
+                <div className="empty-state-icon">◈</div>
+                <p>No session selected</p>
+                <span>Pick a user and agent, then create or select a session from the sidebar</span>
+              </div>
+            )}
+          </>
         )}
       </main>
 
