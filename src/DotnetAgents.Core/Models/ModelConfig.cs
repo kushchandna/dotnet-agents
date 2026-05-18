@@ -7,7 +7,11 @@ public enum ModelProvider
     OpenAI,
     [JsonStringEnumMemberName("openai-compatible")]
     OpenAICompatible,
-    Ollama
+    Ollama,
+    Gemini,
+    Anthropic,
+    [JsonStringEnumMemberName("openrouter")]
+    OpenRouter
 }
 
 public record ModelConfig

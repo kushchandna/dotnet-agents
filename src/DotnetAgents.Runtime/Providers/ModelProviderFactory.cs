@@ -13,6 +13,9 @@ public sealed class ModelProviderFactory : IModelProviderFactory
         ModelProvider.OpenAI => CreateOpenAI(model),
         ModelProvider.OpenAICompatible => CreateOpenAICompatible(model),
         ModelProvider.Ollama => CreateOllama(model),
+        ModelProvider.Gemini => CreateGemini(model),
+        ModelProvider.Anthropic => CreateAnthropic(model),
+        ModelProvider.OpenRouter => CreateOpenRouter(model),
         _ => throw new InvalidOperationException($"Unknown provider: {model.Provider}")
     };
 
@@ -38,6 +41,30 @@ public sealed class ModelProviderFactory : IModelProviderFactory
     {
         var endpoint = new Uri(m.Endpoint ?? "http://localhost:11434");
         return new OllamaApiClient(endpoint, m.ModelName);
+    }
+
+    private static IChatClient CreateGemini(ModelConfig m)
+    {
+        var key = RequireEnv(m.ApiKeyEnvVar
+            ?? throw new InvalidOperationException("apiKeyEnvVar is required for gemini"));
+        var options = new OpenAIClientOptions { Endpoint = new Uri("https://generativelanguage.googleapis.com/v1beta/openai/") };
+        return new OpenAIClient(new ApiKeyCredential(key), options).GetChatClient(m.ModelName).AsIChatClient();
+    }
+
+    private static IChatClient CreateAnthropic(ModelConfig m)
+    {
+        var key = RequireEnv(m.ApiKeyEnvVar
+            ?? throw new InvalidOperationException("apiKeyEnvVar is required for anthropic"));
+        var options = new OpenAIClientOptions { Endpoint = new Uri("https://api.anthropic.com/v1/") };
+        return new OpenAIClient(new ApiKeyCredential(key), options).GetChatClient(m.ModelName).AsIChatClient();
+    }
+
+    private static IChatClient CreateOpenRouter(ModelConfig m)
+    {
+        var key = RequireEnv(m.ApiKeyEnvVar
+            ?? throw new InvalidOperationException("apiKeyEnvVar is required for openrouter"));
+        var options = new OpenAIClientOptions { Endpoint = new Uri("https://openrouter.ai/api/v1") };
+        return new OpenAIClient(new ApiKeyCredential(key), options).GetChatClient(m.ModelName).AsIChatClient();
     }
 
     private static string RequireEnv(string name) =>

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 
+type Provider = 'openai' | 'openai-compatible' | 'ollama' | 'gemini' | 'anthropic' | 'openrouter';
+
 interface ModelConfig {
   id: string;
-  provider: 'openai' | 'openai-compatible' | 'ollama';
+  provider: Provider;
   modelName: string;
   endpoint?: string | null;
   apiKeyEnvVar?: string | null;
@@ -10,7 +12,7 @@ interface ModelConfig {
 
 interface FormState {
   id: string;
-  provider: 'openai' | 'openai-compatible' | 'ollama';
+  provider: Provider;
   modelName: string;
   endpoint: string;
   apiKeyEnvVar: string;
@@ -92,10 +94,13 @@ export function ModelsTab() {
       )}
       <div className="settings-form-row">
         <label className="settings-form-label">Provider</label>
-        <select className="settings-input" value={form.provider} onChange={e => setForm(f => ({ ...f, provider: e.target.value as FormState['provider'] }))}>
-          <option value="ollama">ollama</option>
-          <option value="openai">openai</option>
-          <option value="openai-compatible">openai-compatible</option>
+        <select className="settings-input" value={form.provider} onChange={e => setForm(f => ({ ...f, provider: e.target.value as Provider }))}>
+          <option value="ollama">Ollama</option>
+          <option value="openai">OpenAI</option>
+          <option value="openai-compatible">OpenAI-compatible</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="openrouter">OpenRouter</option>
         </select>
       </div>
       <div className="settings-form-row">
@@ -108,7 +113,7 @@ export function ModelsTab() {
           <input className="settings-input" value={form.endpoint} onChange={e => setForm(f => ({ ...f, endpoint: e.target.value }))} placeholder="http://localhost:11434" />
         </div>
       )}
-      {(form.provider === 'openai' || form.provider === 'openai-compatible') && (
+      {form.provider !== 'ollama' && (
         <div className="settings-form-row">
           <label className="settings-form-label">API Key Env Var</label>
           <input className="settings-input" value={form.apiKeyEnvVar} onChange={e => setForm(f => ({ ...f, apiKeyEnvVar: e.target.value }))} placeholder="OPENAI_API_KEY" />

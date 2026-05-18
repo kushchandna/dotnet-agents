@@ -27,8 +27,9 @@ public static class ConfigValidator
             if (string.IsNullOrWhiteSpace(m.Id)) Err($"{p}.id", "is required");
             else if (!modelIds.Add(m.Id)) Err($"{p}.id", $"duplicate id '{m.Id}'");
             if (string.IsNullOrWhiteSpace(m.ModelName)) Err($"{p}.modelName", "is required");
-            if (m.Provider == ModelProvider.OpenAI && string.IsNullOrWhiteSpace(m.ApiKeyEnvVar))
-                Err($"{p}.apiKeyEnvVar", "apiKeyEnvVar is required for provider 'openai'");
+            if (m.Provider is ModelProvider.OpenAI or ModelProvider.Gemini or ModelProvider.Anthropic or ModelProvider.OpenRouter
+                && string.IsNullOrWhiteSpace(m.ApiKeyEnvVar))
+                Err($"{p}.apiKeyEnvVar", $"apiKeyEnvVar is required for provider '{m.Provider}'");
             if (m.Provider == ModelProvider.OpenAICompatible && string.IsNullOrWhiteSpace(m.Endpoint))
                 Err($"{p}.endpoint", "endpoint is required for provider 'openai-compatible'");
             if (!string.IsNullOrWhiteSpace(m.ApiKeyEnvVar) && !EnvVarPattern.IsMatch(m.ApiKeyEnvVar))
