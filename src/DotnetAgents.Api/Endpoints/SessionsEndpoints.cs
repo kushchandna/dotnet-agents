@@ -48,7 +48,7 @@ public static class SessionsEndpoints
                 var session = await store.GetAsync(userId, sessionId);
                 if (session is null) return Results.NotFound();
                 var msgs = await store.GetMessagesAsync(userId, sessionId);
-                return Results.Ok(msgs.Select(m => new MessageDto(m.Id, m.Role, m.Content, m.ToolCalls, m.Timestamp)).ToArray());
+                return Results.Ok(msgs.Select(ToMessageDto).ToArray());
             }).WithName("ListMessages").WithOpenApi();
 
         app.MapGet("/api/users/{userId}/sessions/{sessionId}/raw",
@@ -63,13 +63,7 @@ public static class SessionsEndpoints
                 var model = cfg.Config.Models.FirstOrDefault(m => m.Id == agent.ModelId);
                 if (model is null) return Results.NotFound();
 
-                IReadOnlyList<string> mcpServers = agent.McpServersInheritance switch
-                {
-                    DotnetAgents.Core.Models.McpServersInheritance.All    => cfg.Config.McpServers.Select(s => s.Id).ToArray(),
-                    DotnetAgents.Core.Models.McpServersInheritance.None   => [],
-                    DotnetAgents.Core.Models.McpServersInheritance.Custom => agent.McpServers,
-                    _                                                      => []
-                };
+                var mcpServers = agent.ResolveMcpServerIds(cfg.Config.McpServers.Select(s => s.Id)).ToArray();
 
                 var msgs = await store.GetMessagesAsync(userId, sessionId);
                 var dto = new SessionRawDto(
@@ -77,7 +71,7 @@ public static class SessionsEndpoints
                     new AgentRawDto(agent.Id, agent.Name, agent.Description, agent.ModelId,
                         agent.Tools, agent.Skills, mcpServers),
                     new ModelRawDto(model.Id, model.Provider, model.ModelName, model.Endpoint),
-                    msgs.Select(m => new MessageDto(m.Id, m.Role, m.Content, m.ToolCalls, m.Timestamp)).ToArray());
+                    msgs.Select(ToMessageDto).ToArray());
 
                 return Results.Ok(dto);
             }).WithName("GetSessionRaw").WithOpenApi();
@@ -85,4 +79,7 @@ public static class SessionsEndpoints
 
     private static SessionDto ToDto(Session s) =>
         new(s.Id, s.UserId, s.AgentId, s.Title, s.CreatedAt, s.UpdatedAt);
+
+    private static MessageDto ToMessageDto(SessionMessage m) =>
+        new(m.Id, m.Role, m.Content, m.ToolCalls, m.Timestamp);
 }

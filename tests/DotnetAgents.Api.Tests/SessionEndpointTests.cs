@@ -4,12 +4,6 @@ using DotnetAgents.Api.Dto;
 
 namespace DotnetAgents.Api.Tests;
 
-// Local DTO for deserializing the /raw response
-file record RawResponse(string? SystemPrompt, RawAgent Agent, RawModel Model, MessageDto[] Messages);
-file record RawAgent(string Id, string Name, string? Description, string ModelId,
-    string[] Tools, string[] Skills, string[] McpServers);
-file record RawModel(string Id, string Provider, string ModelName, string? Endpoint);
-
 [TestFixture]
 public class SessionEndpointTests
 {
@@ -92,7 +86,7 @@ public class SessionEndpointTests
             .Content.ReadFromJsonAsync<SessionDto>();
         var resp = await client.GetAsync($"/api/users/alice/sessions/{s!.Id}/raw");
         resp.EnsureSuccessStatusCode();
-        var raw = await resp.Content.ReadFromJsonAsync<RawResponse>(ApiTestFactory.TestJsonOptions);
+        var raw = await resp.Content.ReadFromJsonAsync<SessionRawDto>(ApiTestFactory.TestJsonOptions);
         Assert.Multiple(() =>
         {
             Assert.That(raw!.Agent.Id, Is.EqualTo("assistant"));
@@ -116,5 +110,20 @@ public class SessionEndpointTests
         await using var f = ApiTestFactory.Create();
         var resp = await f.CreateClient().GetAsync("/api/users/ghost/sessions/missing/raw");
         Assert.That(resp.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
+    [Test]
+    public async Task GetRaw_McpServers_RespectsInheritanceAll()
+    {
+        // Default config has no MCP servers configured; with McpServersInheritance.All (the default),
+        // the resolved list should be empty.
+        await using var f = ApiTestFactory.Create();
+        var client = f.CreateClient();
+        var s = await (await client.PostAsJsonAsync("/api/users/alice/sessions", new { agentId = "assistant" }))
+            .Content.ReadFromJsonAsync<SessionDto>();
+        var resp = await client.GetAsync($"/api/users/alice/sessions/{s!.Id}/raw");
+        resp.EnsureSuccessStatusCode();
+        var raw = await resp.Content.ReadFromJsonAsync<SessionRawDto>(ApiTestFactory.TestJsonOptions);
+        Assert.That(raw!.Agent.McpServers, Is.Empty);
     }
 }

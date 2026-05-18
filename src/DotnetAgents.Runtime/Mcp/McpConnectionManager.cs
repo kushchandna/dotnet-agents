@@ -141,13 +141,7 @@ public sealed class McpConnectionManager(
 
     public IReadOnlyList<AIFunction> ResolveToolsForAgent(AgentConfig agent)
     {
-        IEnumerable<string> visible = agent.McpServersInheritance switch
-        {
-            McpServersInheritance.All    => _runtimes.Keys,
-            McpServersInheritance.None   => [],
-            McpServersInheritance.Custom => agent.McpServers,
-            _                            => []
-        };
+        IEnumerable<string> visible = agent.ResolveMcpServerIds(_runtimes.Keys);
 
         // Fix 2: snapshot both State and Tools atomically under lock to avoid torn reads
         var result = new List<AIFunction>();
