@@ -7,8 +7,6 @@ import { ToolsTab } from './settings/ToolsTab';
 
 type Tab = 'users' | 'agents' | 'models' | 'mcp-servers' | 'tools';
 
-interface Props { onClose: () => void }
-
 const TABS: { id: Tab; label: string }[] = [
   { id: 'users', label: 'Users' },
   { id: 'agents', label: 'Agents' },
@@ -17,19 +15,13 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'tools', label: 'Built-in Tools' },
 ];
 
-export function SettingsPage({ onClose }: Props) {
+export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('users');
 
   return (
     <div className="settings-page">
       <div className="settings-header">
         <span className="settings-title">Settings</span>
-        <button className="icon-btn" onClick={onClose} aria-label="Close settings">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
       </div>
       <div className="settings-tabs">
         {TABS.map((t) => (

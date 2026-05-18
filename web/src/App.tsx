@@ -4,20 +4,32 @@ import { ChatView } from './components/ChatView';
 import { SessionList } from './components/SessionList';
 import { SettingsPage } from './components/SettingsPage';
 import { UserPicker } from './components/UserPicker';
+import { useRoute } from './hooks/useRoute';
+import { getCookie, setCookie } from './lib/storage';
 
 interface User { id: string; displayName: string }
 interface Agent { id: string; name: string; description?: string | null }
 interface Session { id: string; agentId: string; createdAt: string; title?: string | null }
 
+const COOKIE_USER = 'da_last_user';
+const COOKIE_AGENT = 'da_last_agent';
+const LS_SIDEBAR_PINNED = 'da_sidebar_pinned';
+
+const isDesktop = () => typeof window !== 'undefined' && window.innerWidth >= 769;
+
 export default function App() {
+  const { route, navigate } = useRoute();
   const [users, setUsers] = useState<User[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
-  const [view, setView] = useState<'chat' | 'settings'>('chat');
+  const [pinned, setPinned] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(LS_SIDEBAR_PINNED) === '1';
+  });
+  const [sidebarOpen, setSidebarOpen] = useState(() => isDesktop());
 
   useEffect(() => {
     fetch('/api/users').then((r) => r.json()).then(setUsers);
@@ -25,9 +37,31 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (users.length === 0 || userId) return;
+    const saved = getCookie(COOKIE_USER);
+    if (saved && users.some((u) => u.id === saved)) setUserId(saved);
+  }, [users, userId]);
+
+  useEffect(() => {
+    if (agents.length === 0 || agentId) return;
+    const saved = getCookie(COOKIE_AGENT);
+    if (saved && agents.some((a) => a.id === saved)) setAgentId(saved);
+  }, [agents, agentId]);
+
+  useEffect(() => {
     if (!userId) { setSessions([]); return; }
     fetch(`/api/users/${userId}/sessions`).then((r) => r.json()).then(setSessions);
   }, [userId]);
+
+  const handleSelectUser = (id: string) => {
+    setUserId(id);
+    setCookie(COOKIE_USER, id);
+  };
+
+  const handleSelectAgent = (id: string) => {
+    setAgentId(id);
+    setCookie(COOKIE_AGENT, id);
+  };
 
   const handleNew = async () => {
     if (!userId || !agentId) return;
@@ -38,7 +72,7 @@ export default function App() {
     const s: Session = await r.json();
     setSessions((xs) => [s, ...xs]);
     setSessionId(s.id);
-    setSidebarOpen(false);
+    if (!pinned) setSidebarOpen(false);
   };
 
   const handleDelete = async (sid: string) => {
@@ -50,41 +84,69 @@ export default function App() {
 
   const handleSelectSession = (sid: string) => {
     setSessionId(sid);
-    setSidebarOpen(false);
+    if (!pinned) setSidebarOpen(false);
+  };
+
+  const togglePin = () => {
+    setPinned((p) => {
+      const next = !p;
+      localStorage.setItem(LS_SIDEBAR_PINNED, next ? '1' : '0');
+      if (next) setSidebarOpen(true);
+      return next;
+    });
   };
 
   const activeSession = sessions.find((s) => s.id === sessionId);
+  const effectivePinned = pinned && isDesktop();
 
   return (
-    <div className="app-layout" data-testid="app">
+    <div
+      className={`app-layout${effectivePinned ? ' sidebar-pinned' : ''}`}
+      data-testid="app"
+    >
 
       <header className="mobile-header">
-        <button
-          className="icon-btn"
-          onClick={() => setSidebarOpen((o) => !o)}
-          aria-label="Toggle menu"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            {sidebarOpen
-              ? <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>
-              : <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>}
-          </svg>
-        </button>
+        {effectivePinned ? <div style={{ width: 36 }} /> : (
+          <button
+            className="icon-btn"
+            onClick={() => setSidebarOpen((o) => !o)}
+            aria-label="Toggle menu"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              {sidebarOpen
+                ? <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>
+                : <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>}
+            </svg>
+          </button>
+        )}
         <span className="mobile-header-title">
-          {view === 'settings' ? 'Settings' : activeSession?.title ?? (sessionId ? 'Chat' : 'dotnet-agents')}
+          {route === 'settings' ? 'Settings' : activeSession?.title ?? (sessionId ? 'Chat' : 'dotnet-agents')}
         </span>
         <div style={{ width: 36 }} />
       </header>
 
       <div
-        className={`sidebar-backdrop${sidebarOpen ? ' open' : ''}`}
+        className={`sidebar-backdrop${sidebarOpen && !effectivePinned ? ' open' : ''}`}
         onClick={() => setSidebarOpen(false)}
       />
 
-      <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
-        <div className="sidebar-brand">dotnet · agents</div>
-        <UserPicker users={users} selectedUserId={userId} onSelect={setUserId} />
-        <AgentPicker agents={agents} selectedAgentId={agentId} onSelect={setAgentId} />
+      <aside className={`sidebar${sidebarOpen ? ' open' : ''}${effectivePinned ? ' pinned' : ''}`}>
+        <div className="sidebar-brand-row">
+          <div className="sidebar-brand">dotnet · agents</div>
+          <button
+            className={`icon-btn pin-btn${pinned ? ' active' : ''}`}
+            onClick={togglePin}
+            aria-label={pinned ? 'Unpin sidebar' : 'Pin sidebar'}
+            title={pinned ? 'Unpin sidebar' : 'Pin sidebar'}
+          >
+            <svg viewBox="0 0 24 24" fill={pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 17v5"/>
+              <path d="M9 10.76V4h6v6.76a2 2 0 0 0 .59 1.41l1.7 1.7A1 1 0 0 1 16.59 16H7.41a1 1 0 0 1-.7-1.71l1.7-1.7A2 2 0 0 0 9 10.76z"/>
+            </svg>
+          </button>
+        </div>
+        <UserPicker users={users} selectedUserId={userId} onSelect={handleSelectUser} />
+        <AgentPicker agents={agents} selectedAgentId={agentId} onSelect={handleSelectAgent} />
         <SessionList
           sessions={sessions}
           activeSessionId={sessionId}
@@ -94,7 +156,7 @@ export default function App() {
         />
         <button
           className="icon-btn settings-btn"
-          onClick={() => { setView((v) => v === 'settings' ? 'chat' : 'settings'); setSidebarOpen(false); }}
+          onClick={() => { navigate(route === 'settings' ? 'chat' : 'settings'); if (!pinned) setSidebarOpen(false); }}
           aria-label="Settings"
           title="Settings"
         >
@@ -106,8 +168,8 @@ export default function App() {
       </aside>
 
       <main className="chat-area">
-        {view === 'settings' ? (
-          <SettingsPage onClose={() => setView('chat')} />
+        {route === 'settings' ? (
+          <SettingsPage />
         ) : userId && sessionId ? (
           <ChatView userId={userId} sessionId={sessionId} />
         ) : (

@@ -37,6 +37,11 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   height: 100dvh;
   padding-top: var(--header-h);
   overflow: hidden;
+  transition: padding-left 0.22s cubic-bezier(0.4,0,0.2,1);
+}
+
+@media (min-width: 769px) {
+  .app-layout.sidebar-pinned { padding-left: var(--sidebar-w); }
 }
 
 /* ── App header (always visible) ────────── */
@@ -113,12 +118,39 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   box-shadow: 8px 0 32px rgba(0,0,0,0.4);
 }
 
+@media (min-width: 769px) {
+  .sidebar.pinned {
+    transform: translateX(0);
+    box-shadow: none;
+    border-right: 1px solid var(--border);
+  }
+}
+
+.sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-faint);
+}
+
 .sidebar-brand {
   font-size: 11px; font-weight: 700;
   letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--accent);
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-faint);
+}
+
+.pin-btn {
+  width: 28px; height: 28px;
+}
+.pin-btn svg { width: 14px; height: 14px; transform: rotate(45deg); transition: transform 0.18s, color 0.15s; }
+.pin-btn.active { color: var(--accent); background: var(--accent-bg); }
+.pin-btn.active svg { transform: rotate(0deg); }
+
+@media (max-width: 768px) {
+  .pin-btn { display: none; }
+  .sidebar-brand-row { justify-content: flex-start; }
 }
 
 /* ── Picker groups ──────────────────────── */
@@ -371,7 +403,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 @media (max-width: 768px) {
   .sidebar { width: min(var(--sidebar-w), 82vw); }
-  .sidebar-brand { display: none; }
+  .sidebar-brand-row { display: none; }
   .message-bubble { max-width: 88%; }
   .messages { padding: 16px 14px 10px; gap: 12px; }
   .chat-input-form { padding: 10px 12px 14px; }
