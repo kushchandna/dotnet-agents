@@ -25,7 +25,9 @@ export function ModelsTab() {
   const [form, setForm] = useState<FormState>(empty());
   const [error, setError] = useState<string | null>(null);
 
-  const load = () => fetch('/api/config/models').then(r => r.json()).then(setModels)
+  const load = () => fetch('/api/config/models')
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+    .then(setModels)
     .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed to load'));
 
   useEffect(() => { load(); }, []);
