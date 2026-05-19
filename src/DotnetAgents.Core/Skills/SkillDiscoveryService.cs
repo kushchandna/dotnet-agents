@@ -32,13 +32,17 @@ public class SkillDiscoveryService : ISkillDiscoveryService
             var lines = await File.ReadAllLinesAsync(filePath, ct);
             return ParseSkill(filePath, lines);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch
         {
             return null;
         }
     }
 
-    private static SkillInfo ParseSkill(string filePath, string[] lines)
+    internal static SkillInfo ParseSkill(string filePath, string[] lines)
     {
         string? name = null;
         string? description = null;
@@ -47,6 +51,9 @@ public class SkillDiscoveryService : ISkillDiscoveryService
         if (lines.Length > 0 && lines[0].Trim() == "---")
         {
             int closingIndex = -1;
+            string? parsedName = null;
+            string? parsedDescription = null;
+
             for (int i = 1; i < lines.Length; i++)
             {
                 if (lines[i].Trim() == "---")
@@ -62,14 +69,18 @@ public class SkillDiscoveryService : ISkillDiscoveryService
                     var value = lines[i][(colonIndex + 1)..].Trim();
 
                     if (key.Equals("name", StringComparison.OrdinalIgnoreCase))
-                        name = value;
+                        parsedName = value;
                     else if (key.Equals("description", StringComparison.OrdinalIgnoreCase))
-                        description = value;
+                        parsedDescription = value;
                 }
             }
 
             if (closingIndex >= 0)
+            {
+                name = parsedName;
+                description = parsedDescription;
                 contentStart = closingIndex + 1;
+            }
         }
 
         var id = !string.IsNullOrWhiteSpace(name)
