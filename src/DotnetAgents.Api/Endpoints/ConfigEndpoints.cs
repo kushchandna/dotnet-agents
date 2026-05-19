@@ -320,7 +320,7 @@ public static class ConfigEndpoints
     }
 
     private static AgentSettingsDto ToDto(AgentConfig a) =>
-        new(a.Id, a.Name, a.Description, a.ModelId, a.SystemPrompt, a.Tools, a.McpServersInheritance, a.McpServers);
+        new(a.Id, a.Name, a.Description, a.ModelId, a.SystemPrompt, a.Tools, a.SkillsInheritance, a.Skills, a.McpServersInheritance, a.McpServers);
 
     private static AgentConfig FromRequest(UpsertAgentRequest r) => new()
     {
@@ -330,6 +330,8 @@ public static class ConfigEndpoints
         ModelId = r.ModelId,
         SystemPrompt = r.SystemPrompt,
         Tools = r.Tools ?? [],
+        SkillsInheritance = r.SkillsInheritance,
+        Skills = r.Skills ?? [],
         McpServersInheritance = r.McpServersInheritance,
         McpServers = r.McpServers ?? []
     };

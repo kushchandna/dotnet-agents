@@ -40,6 +40,7 @@ SessionsEndpoints.Map(app);
 MessagesEndpoints.Map(app);
 ToolsEndpoints.Map(app);
 ConfigEndpoints.Map(app);
+SkillsEndpoints.Map(app);
 
 app.Run();
 

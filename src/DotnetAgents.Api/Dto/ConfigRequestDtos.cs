@@ -9,6 +9,8 @@ public record UpsertAgentRequest(
     string ModelId,
     string? SystemPrompt,
     List<string>? Tools,
+    SkillsInheritance SkillsInheritance,
+    List<string>? Skills,
     McpServersInheritance McpServersInheritance,
     List<string>? McpServers);
 

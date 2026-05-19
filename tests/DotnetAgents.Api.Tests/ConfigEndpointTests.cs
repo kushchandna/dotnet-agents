@@ -46,7 +46,7 @@ public class ConfigEndpointTests
         await using var f = ApiTestFactory.Create();
         var client = f.CreateClient();
 
-        var req = new UpsertAgentRequest("coder", "Coder", null, "m", null, null, McpServersInheritance.All, null);
+        var req = new UpsertAgentRequest("coder", "Coder", null, "m", null, null, SkillsInheritance.All, null, McpServersInheritance.All, null);
         var post = await client.PostAsJsonAsync("/api/config/agents", req);
         Assert.That((int)post.StatusCode, Is.EqualTo(201));
 
@@ -58,7 +58,7 @@ public class ConfigEndpointTests
     public async Task PostConfigAgent_DuplicateId_Returns409()
     {
         await using var f = ApiTestFactory.Create();
-        var req = new UpsertAgentRequest("assistant", "Dup", null, "m", null, null, McpServersInheritance.All, null);
+        var req = new UpsertAgentRequest("assistant", "Dup", null, "m", null, null, SkillsInheritance.All, null, McpServersInheritance.All, null);
         var resp = await f.CreateClient().PostAsJsonAsync("/api/config/agents", req);
         Assert.That((int)resp.StatusCode, Is.EqualTo(409));
     }
@@ -67,7 +67,7 @@ public class ConfigEndpointTests
     public async Task PostConfigAgent_UnknownModelId_Returns400()
     {
         await using var f = ApiTestFactory.Create();
-        var req = new UpsertAgentRequest("new-agent", "New", null, "unknown-model", null, null, McpServersInheritance.All, null);
+        var req = new UpsertAgentRequest("new-agent", "New", null, "unknown-model", null, null, SkillsInheritance.All, null, McpServersInheritance.All, null);
         var resp = await f.CreateClient().PostAsJsonAsync("/api/config/agents", req);
         Assert.That((int)resp.StatusCode, Is.EqualTo(400));
     }
@@ -78,7 +78,7 @@ public class ConfigEndpointTests
         await using var f = ApiTestFactory.Create();
         var client = f.CreateClient();
 
-        var req = new UpsertAgentRequest("assistant", "Renamed Assistant", null, "m", null, null, McpServersInheritance.All, null);
+        var req = new UpsertAgentRequest("assistant", "Renamed Assistant", null, "m", null, null, SkillsInheritance.All, null, McpServersInheritance.All, null);
         var put = await client.PutAsJsonAsync("/api/config/agents/assistant", req);
         Assert.That((int)put.StatusCode, Is.EqualTo(200));
 

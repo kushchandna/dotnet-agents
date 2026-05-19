@@ -9,5 +9,7 @@ public record AgentSettingsDto(
     string ModelId,
     string? SystemPrompt,
     IReadOnlyList<string> Tools,
+    SkillsInheritance SkillsInheritance,
+    IReadOnlyList<string> Skills,
     McpServersInheritance McpServersInheritance,
     IReadOnlyList<string> McpServers);
