@@ -35,7 +35,6 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 .app-layout {
   height: 100dvh;
-  padding-top: var(--header-h);
   overflow: hidden;
   transition: padding-left 0.22s cubic-bezier(0.4,0,0.2,1);
 }
@@ -44,29 +43,6 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   .app-layout.sidebar-pinned { padding-left: var(--sidebar-w); }
 }
 
-/* ── App header (always visible) ────────── */
-
-.mobile-header {
-  display: flex;
-  position: fixed;
-  inset: 0 0 auto 0;
-  height: var(--header-h);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  z-index: 200;
-  gap: 10px;
-}
-
-.mobile-header-title {
-  flex: 1;
-  font-size: 14px; font-weight: 600;
-  color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  text-align: center;
-}
 
 .icon-btn {
   width: 36px; height: 36px;
@@ -99,7 +75,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 .sidebar {
   position: fixed;
-  top: var(--header-h); left: 0; bottom: 0;
+  top: 0; left: 0; bottom: 0;
   width: var(--sidebar-w);
   background: var(--surface);
   border-right: 1px solid var(--border);
