@@ -17,12 +17,19 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'tools', label: 'Built-in Tools' },
 ];
 
-export function SettingsPage() {
+export function SettingsPage({ onBack }: { onBack?: () => void }) {
   const [activeTab, setActiveTab] = useState<Tab>('users');
 
   return (
     <div className="settings-page">
       <div className="settings-header">
+        {onBack && (
+          <button className="icon-btn settings-back-btn" onClick={onBack} aria-label="Back to chat" title="Back to chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+        )}
         <span className="settings-title">Settings</span>
       </div>
       <div className="settings-tabs">

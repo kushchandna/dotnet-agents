@@ -105,12 +105,12 @@ export default function App() {
 
   return (
     <div
-      className={`app-layout${effectivePinned ? ' sidebar-pinned' : ''}`}
+      className={`app-layout${effectivePinned && route !== 'settings' ? ' sidebar-pinned' : ''}`}
       data-testid="app"
     >
 
       <header className="mobile-header">
-        {effectivePinned ? <div style={{ width: 36 }} /> : (
+        {effectivePinned || route === 'settings' ? <div style={{ width: 36 }} /> : (
           <button
             className="icon-btn"
             onClick={() => setSidebarOpen((o) => !o)}
@@ -124,19 +124,21 @@ export default function App() {
           </button>
         )}
         <span className="mobile-header-title">
-          {route === 'settings' ? 'Settings' : activeSession?.title ?? (sessionId ? 'Chat' : 'dotnet-agents')}
+          {route === 'settings' ? 'Settings' : activeSession?.title ?? (sessionId ? 'Chat' : 'DotNet Agents')}
         </span>
         <div style={{ width: 36 }} />
       </header>
 
-      <div
-        className={`sidebar-backdrop${sidebarOpen && !effectivePinned ? ' open' : ''}`}
-        onClick={() => setSidebarOpen(false)}
-      />
+      {route !== 'settings' && (
+        <div
+          className={`sidebar-backdrop${sidebarOpen && !effectivePinned ? ' open' : ''}`}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-      <aside className={`sidebar${sidebarOpen ? ' open' : ''}${effectivePinned ? ' pinned' : ''}`}>
+      {route !== 'settings' && <aside className={`sidebar${sidebarOpen ? ' open' : ''}${effectivePinned ? ' pinned' : ''}`}>
         <div className="sidebar-brand-row">
-          <div className="sidebar-brand">dotnet · agents</div>
+          <div className="sidebar-brand">DotNet Agents</div>
           <button
             className={`icon-btn pin-btn${pinned ? ' active' : ''}`}
             onClick={togglePin}
@@ -160,7 +162,7 @@ export default function App() {
         />
         <button
           className="icon-btn settings-btn"
-          onClick={() => { navigate(route === 'settings' ? 'chat' : 'settings'); if (!pinned) setSidebarOpen(false); }}
+          onClick={() => { navigate('settings'); if (!pinned) setSidebarOpen(false); }}
           aria-label="Settings"
           title="Settings"
         >
@@ -169,27 +171,23 @@ export default function App() {
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </button>
-      </aside>
+      </aside>}
 
       <main className="chat-area">
         {route === 'settings' ? (
-          <SettingsPage />
+          <SettingsPage onBack={() => navigate('chat')} />
         ) : (
           <>
             {userId && sessionId && (
-              <div className="chat-view-tabs" data-testid="chat-view-tabs" role="tablist" aria-label="View">
-                <button
-                  className={`chat-view-tab${chatView === 'chat' ? ' active' : ''}`}
-                  onClick={() => setChatView('chat')}
-                  role="tab"
-                  aria-selected={chatView === 'chat'}
-                >Chat</button>
-                <button
-                  className={`chat-view-tab${chatView === 'raw' ? ' active' : ''}`}
-                  onClick={() => setChatView('raw')}
-                  role="tab"
-                  aria-selected={chatView === 'raw'}
-                >Raw</button>
+              <div className="chat-raw-toggle" data-testid="chat-view-tabs">
+                <label className="raw-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={chatView === 'raw'}
+                    onChange={(e) => setChatView(e.target.checked ? 'raw' : 'chat')}
+                  />
+                  Show Raw
+                </label>
               </div>
             )}
             {userId && sessionId ? (
