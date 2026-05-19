@@ -1,8 +1,8 @@
 # Dotnet Agents
 
-A configuration-driven, JSON-backed agent runtime in .NET 10 with a React web UI.
+A configuration-driven agent runtime for .NET 10 with built-in MCP support, multi-provider models, and a React web UI for live configuration.
 
-A single `config.json` declares agents, models, users, and tool settings. The same agent runs from a C# façade (in-process), a REST API with SSE streaming, and a React web UI.
+A single `config.json` declares agents, models, MCP servers, skills, and users. The same agent runs from a C# façade (in-process), a REST API with SSE streaming, and a React web UI.
 
 ## Requirements
 
@@ -38,8 +38,10 @@ Open `http://localhost:5173` (or `http://<host-ip>:5173` from another machine on
 The web UI includes a settings page (gear icon in the sidebar) for managing configuration without editing `config.json` directly. Changes are persisted to disk immediately and take effect for new sessions.
 
 - **Users** — add, edit, and delete users
-- **Agents** — full CRUD with system prompt, built-in tool selection, and MCP server inheritance (all / none / custom)
-- **MCP Servers** — add stdio (command + args + env vars) or SSE/HTTP (URL) servers
+- **Agents** — full CRUD with system prompt, built-in tool selection, MCP server inheritance (all / none / custom), and skills inheritance (all / none / custom)
+- **Models** — add, edit, and delete model definitions (provider, model name, endpoint, API key env var)
+- **MCP Servers** — add stdio (command + args + env vars) or SSE/HTTP (URL) servers; live connection status with retry button
+- **Skills** — manage skill directories; auto-discovers and lists all available skills
 - **Built-in Tools** — read-only list of available tools
 
 ## Restarting the API
@@ -65,11 +67,14 @@ See `samples/config.example.json` for a full example and `samples/config.schema.
 
 ### Supported providers
 
-| Provider            | Required fields                       |
-|---------------------|---------------------------------------|
-| `openai`            | `modelName`, `apiKeyEnvVar`           |
-| `openai-compatible` | `modelName`, `endpoint`, `apiKeyEnvVar` (optional) |
-| `ollama`            | `modelName`, `endpoint`               |
+| Provider            | Required fields                                     |
+|---------------------|-----------------------------------------------------|
+| `openai`            | `modelName`, `apiKeyEnvVar`                         |
+| `openai-compatible` | `modelName`, `endpoint`, `apiKeyEnvVar` (optional)  |
+| `ollama`            | `modelName`, `endpoint` (default: `http://localhost:11434`) |
+| `gemini`            | `modelName`, `apiKeyEnvVar`                         |
+| `anthropic`         | `modelName`, `apiKeyEnvVar`                         |
+| `openrouter`        | `modelName`, `apiKeyEnvVar`                         |
 
 ### Built-in tools
 
@@ -79,38 +84,49 @@ See `samples/config.example.json` for a full example and `samples/config.schema.
 
 **Chat**
 
-| Method | Route                                                  |
-|--------|--------------------------------------------------------|
-| GET    | `/health`                                              |
-| GET    | `/api/users`                                           |
-| GET    | `/api/agents`                                          |
-| GET    | `/api/agents/{agentId}`                                |
-| GET    | `/api/tools`                                           |
-| GET    | `/api/users/{userId}/sessions`                         |
-| POST   | `/api/users/{userId}/sessions`                         |
-| GET    | `/api/users/{userId}/sessions/{sessionId}`             |
-| DELETE | `/api/users/{userId}/sessions/{sessionId}`             |
-| GET    | `/api/users/{userId}/sessions/{sessionId}/messages`    |
-| POST   | `/api/users/{userId}/sessions/{sessionId}/messages`    |
+| Method | Route                                                      |
+|--------|------------------------------------------------------------|
+| GET    | `/health`                                                  |
+| GET    | `/api/users`                                               |
+| GET    | `/api/agents`                                              |
+| GET    | `/api/agents/{agentId}`                                    |
+| GET    | `/api/tools`                                               |
+| GET    | `/api/users/{userId}/sessions`                             |
+| POST   | `/api/users/{userId}/sessions`                             |
+| GET    | `/api/users/{userId}/sessions/{sessionId}`                 |
+| DELETE | `/api/users/{userId}/sessions/{sessionId}`                 |
+| GET    | `/api/users/{userId}/sessions/{sessionId}/messages`        |
+| POST   | `/api/users/{userId}/sessions/{sessionId}/messages`        |
+| GET    | `/api/users/{userId}/sessions/{sessionId}/raw`             |
 
-The POST `/messages` endpoint returns `text/event-stream` with `data: {...}\n\n` events of type `delta`, `tool_call`, `tool_result`, `done`, or `error`.
+The POST `/messages` endpoint returns `text/event-stream` with `data: {...}\n\n` events of type `delta`, `tool_call`, `tool_result`, `done`, or `error`. The `/raw` endpoint returns the session's resolved agent, model, and full message history (useful for debugging).
 
 **Configuration (settings UI)**
 
-| Method | Route                          |
-|--------|--------------------------------|
-| GET    | `/api/config/agents`           |
-| POST   | `/api/config/agents`           |
-| PUT    | `/api/config/agents/{id}`      |
-| DELETE | `/api/config/agents/{id}`      |
-| GET    | `/api/config/users`            |
-| POST   | `/api/config/users`            |
-| PUT    | `/api/config/users/{id}`       |
-| DELETE | `/api/config/users/{id}`       |
-| GET    | `/api/config/mcp-servers`      |
-| POST   | `/api/config/mcp-servers`      |
-| PUT    | `/api/config/mcp-servers/{id}` |
-| DELETE | `/api/config/mcp-servers/{id}` |
+| Method | Route                                   |
+|--------|-----------------------------------------|
+| GET    | `/api/config/agents`                    |
+| POST   | `/api/config/agents`                    |
+| PUT    | `/api/config/agents/{id}`               |
+| DELETE | `/api/config/agents/{id}`               |
+| GET    | `/api/config/users`                     |
+| POST   | `/api/config/users`                     |
+| PUT    | `/api/config/users/{id}`                |
+| DELETE | `/api/config/users/{id}`                |
+| GET    | `/api/config/models`                    |
+| POST   | `/api/config/models`                    |
+| PUT    | `/api/config/models/{id}`               |
+| DELETE | `/api/config/models/{id}`               |
+| GET    | `/api/config/mcp-servers`               |
+| POST   | `/api/config/mcp-servers`               |
+| PUT    | `/api/config/mcp-servers/{id}`          |
+| DELETE | `/api/config/mcp-servers/{id}`          |
+| GET    | `/api/config/mcp-servers/status`        |
+| POST   | `/api/config/mcp-servers/{id}/retry`    |
+| GET    | `/api/config/skill-directories`         |
+| POST   | `/api/config/skill-directories`         |
+| DELETE | `/api/config/skill-directories`         |
+| GET    | `/api/config/skills`                    |
 
 All config mutations validate the new state and persist changes to `config.json`. OpenAPI spec is served at `/openapi/v1.json`.
 
