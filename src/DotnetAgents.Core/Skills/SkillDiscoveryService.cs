@@ -13,10 +13,12 @@ public class SkillDiscoveryService : ISkillDiscoveryService
             if (!Directory.Exists(directory))
                 continue;
 
-            var files = Directory.EnumerateFiles(directory, "*.md", SearchOption.AllDirectories);
-            foreach (var file in files)
+            foreach (var subdir in Directory.EnumerateDirectories(directory))
             {
-                var skill = await TryParseSkillAsync(file, ct);
+                var skillFile = Path.Combine(subdir, "SKILL.md");
+                if (!File.Exists(skillFile))
+                    continue;
+                var skill = await TryParseSkillAsync(skillFile, ct);
                 if (skill is not null)
                     skills.Add(skill);
             }

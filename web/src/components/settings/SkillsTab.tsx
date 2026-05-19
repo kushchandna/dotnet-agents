@@ -117,7 +117,7 @@ export function SkillsTab() {
         <div className="settings-list-row" key={s.id}>
           <div className="settings-row-info">
             <div className="settings-row-id">{s.id}</div>
-            {s.description && <div className="settings-row-sub">{s.description}</div>}
+            {s.description && <div className="settings-row-sub" style={{ whiteSpace: 'normal', overflow: 'visible', textOverflow: 'unset' }}>{s.description}</div>}
           </div>
           <div style={{ fontSize: 11, color: 'var(--dim)', fontFamily: 'JetBrains Mono, monospace' }}>skill</div>
         </div>

@@ -95,11 +95,13 @@ public class SkillDiscoveryServiceTests
     // Integration tests using the real service with a temp directory
 
     [Test]
-    public async Task GetAllSkillsAsync_ReturnsSkillsFromDirectory()
+    public async Task GetAllSkillsAsync_ReturnsSkillsFromDirectChildSubdirs()
     {
-        await File.WriteAllTextAsync(Path.Combine(_dir, "skill-a.md"),
+        var subdirA = Directory.CreateDirectory(Path.Combine(_dir, "skill-a")).FullName;
+        var subdirB = Directory.CreateDirectory(Path.Combine(_dir, "skill-b")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(subdirA, "SKILL.md"),
             "---\nname: Skill A\ndescription: First\n---\n\nBody A");
-        await File.WriteAllTextAsync(Path.Combine(_dir, "skill-b.md"),
+        await File.WriteAllTextAsync(Path.Combine(subdirB, "SKILL.md"),
             "Just plain content.");
 
         var service = new SkillDiscoveryService();
@@ -110,8 +112,46 @@ public class SkillDiscoveryServiceTests
         Assert.That(a.Description, Is.EqualTo("First"));
         Assert.That(a.Content, Is.EqualTo("Body A"));
 
-        var b = skills.Single(s => s.Id == "skill-b");
+        var b = skills.Single(s => s.Id == "SKILL");
         Assert.That(b.Description, Is.EqualTo(string.Empty));
+    }
+
+    [Test]
+    public async Task GetAllSkillsAsync_IgnoresFilesDirectlyInDirectory()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_dir, "SKILL.md"),
+            "---\nname: Root Skill\n---\nbody");
+
+        var service = new SkillDiscoveryService();
+        var skills = await service.GetAllSkillsAsync([_dir], CancellationToken.None);
+
+        Assert.That(skills, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetAllSkillsAsync_IgnoresNestedSubdirSkills()
+    {
+        var subdir = Directory.CreateDirectory(Path.Combine(_dir, "parent")).FullName;
+        var nested = Directory.CreateDirectory(Path.Combine(subdir, "child")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(nested, "SKILL.md"),
+            "---\nname: Nested\n---\nbody");
+
+        var service = new SkillDiscoveryService();
+        var skills = await service.GetAllSkillsAsync([_dir], CancellationToken.None);
+
+        Assert.That(skills, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetAllSkillsAsync_IgnoresSubdirWithoutSkillMd()
+    {
+        var subdir = Directory.CreateDirectory(Path.Combine(_dir, "no-skill")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(subdir, "other.md"), "some content");
+
+        var service = new SkillDiscoveryService();
+        var skills = await service.GetAllSkillsAsync([_dir], CancellationToken.None);
+
+        Assert.That(skills, Is.Empty);
     }
 
     [Test]
@@ -126,7 +166,8 @@ public class SkillDiscoveryServiceTests
     [Test]
     public async Task GetAllSkillsAsync_CancellationRequested_ThrowsOperationCanceledException()
     {
-        await File.WriteAllTextAsync(Path.Combine(_dir, "skill.md"),
+        var subdir = Directory.CreateDirectory(Path.Combine(_dir, "x")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(subdir, "SKILL.md"),
             "---\nname: X\n---\n\nbody");
 
         var service = new SkillDiscoveryService();
