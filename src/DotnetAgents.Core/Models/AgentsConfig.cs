@@ -8,4 +8,5 @@ public record AgentsConfig
     public required SessionsConfig             Sessions { get; init; }
     public ToolsConfig?                        Tools { get; init; }
     public IReadOnlyList<McpServerConfig>      McpServers { get; init; } = [];
+    public IReadOnlyList<string>               SkillDirectories { get; init; } = [];
 }
