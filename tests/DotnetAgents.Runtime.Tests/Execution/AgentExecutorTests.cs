@@ -3,6 +3,7 @@ using DotnetAgents.Core.Configuration;
 using DotnetAgents.Core.Models;
 using DotnetAgents.Core.Runtime;
 using DotnetAgents.Core.Sessions;
+using DotnetAgents.Core.Skills;
 using DotnetAgents.Runtime.Execution;
 using DotnetAgents.Runtime.Mcp;
 using DotnetAgents.Runtime.Providers;
@@ -49,6 +50,14 @@ public class AgentExecutorTests
         public IChatClient Create(ModelConfig model) => client;
     }
 
+    private static ISkillDiscoveryService NoSkills()
+    {
+        var svc = Substitute.For<ISkillDiscoveryService>();
+        svc.GetAllSkillsAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+           .Returns(Task.FromResult<IReadOnlyList<SkillInfo>>([]));
+        return svc;
+    }
+
     private AgentsConfig BuildConfig() => new()
     {
         Agents = [new AgentConfig {
@@ -75,7 +84,7 @@ public class AgentExecutorTests
         var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
         var mcpManager = Substitute.For<IMcpConnectionManager>();
         mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([]);
-        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager);
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager, NoSkills());
 
         var updates = new List<AgentStreamUpdate>();
         await foreach (var u in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "Hi")))
@@ -116,7 +125,7 @@ public class AgentExecutorTests
         var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
         var mcpManager = Substitute.For<IMcpConnectionManager>();
         mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([]);
-        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager);
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager, NoSkills());
 
         var updates = new List<AgentStreamUpdate>();
         await foreach (var u in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "say hi")))
@@ -136,7 +145,7 @@ public class AgentExecutorTests
         var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
         var mcpManager = Substitute.For<IMcpConnectionManager>();
         mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([]);
-        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager);
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager, NoSkills());
 
         var updates = new List<AgentStreamUpdate>();
         await foreach (var u in executor.RunStreamingAsync(new AgentRunRequest("u", "missing", "hi")))
@@ -177,7 +186,7 @@ public class AgentExecutorTests
         var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
         var mcpManager = Substitute.For<IMcpConnectionManager>();
         mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([]);
-        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager);
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager, NoSkills());
 
         await foreach (var _ in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "next turn"))) { }
 
@@ -221,7 +230,7 @@ public class AgentExecutorTests
         var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
         var mcpManager = Substitute.For<IMcpConnectionManager>();
         mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([]);
-        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager);
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager, NoSkills());
 
         var updates = new List<AgentStreamUpdate>();
         await foreach (var u in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "go")))
@@ -258,11 +267,56 @@ public class AgentExecutorTests
         var mcpManager = Substitute.For<IMcpConnectionManager>();
         mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([mcpTool]);
 
-        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager);
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager, NoSkills());
 
         await foreach (var _ in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "hi"))) { }
 
         // Verify the merge path was exercised: ResolveToolsForAgent was called with the resolved agent
         mcpManager.Received(1).ResolveToolsForAgent(Arg.Is<AgentConfig>(a => a.Id == "a"));
+    }
+
+    [Test]
+    public async Task RunStreaming_CustomSkills_InjectsSkillContentIntoSystemPrompt()
+    {
+        ChatOptions? capturedOptions = null;
+
+        async IAsyncEnumerable<ChatResponseUpdate> Stream([EnumeratorCancellation] CancellationToken ct = default)
+        {
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "ok") { FinishReason = ChatFinishReason.Stop };
+            await Task.CompletedTask;
+        }
+
+        var client = new StubChatClient((msgs, opts) => { capturedOptions = opts; return Stream(); });
+
+        var cfg = new AgentsConfig
+        {
+            Agents = [new AgentConfig {
+                Id = "a", Name = "A", ModelId = "m", SystemPrompt = "be helpful",
+                Tools = [],
+                SkillsInheritance = SkillsInheritance.Custom,
+                Skills = ["coding"] }],
+            Models = [new ModelConfig { Id = "m", Provider = ModelProvider.OpenAI, ModelName = "gpt-4o", ApiKeyEnvVar = "K" }],
+            Users  = [new UserConfig { Id = "u", DisplayName = "U" }],
+            Sessions = new SessionsConfig { Directory = _sessionsRoot }
+        };
+
+        var session = await _store.CreateAsync("u", "a");
+        var registry = new BuiltInToolRegistry(null, Substitute.For<IHttpClientFactory>());
+        var mcpManager = Substitute.For<IMcpConnectionManager>();
+        mcpManager.ResolveToolsForAgent(Arg.Any<AgentConfig>()).Returns([]);
+
+        var skillDiscovery = Substitute.For<ISkillDiscoveryService>();
+        skillDiscovery.GetAllSkillsAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<SkillInfo>>(
+            [
+                new SkillInfo("coding", "Coding assistance", "Always write clean code.", "/skills/coding.md"),
+                new SkillInfo("writing", "Writing help", "Write clearly.", "/skills/writing.md")
+            ]));
+
+        var executor = new AgentExecutor(new ConfigurationService(cfg), new StubFactory(client), _store, registry, mcpManager, skillDiscovery);
+
+        await foreach (var _ in executor.RunStreamingAsync(new AgentRunRequest("u", session.Id, "help"))) { }
+
+        Assert.That(capturedOptions?.Instructions, Is.EqualTo("be helpful\n\nAlways write clean code."));
     }
 }

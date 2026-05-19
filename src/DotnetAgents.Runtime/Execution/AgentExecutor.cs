@@ -5,6 +5,7 @@ using DotnetAgents.Core.Configuration;
 using DotnetAgents.Core.Models;
 using DotnetAgents.Core.Runtime;
 using DotnetAgents.Core.Sessions;
+using DotnetAgents.Core.Skills;
 using DotnetAgents.Runtime.Mcp;
 using DotnetAgents.Runtime.Providers;
 using DotnetAgents.Tools.BuiltIn;
@@ -18,7 +19,8 @@ public sealed class AgentExecutor(
     IModelProviderFactory providerFactory,
     ISessionStore sessions,
     BuiltInToolRegistry tools,
-    IMcpConnectionManager mcpManager) : IAgentRuntime
+    IMcpConnectionManager mcpManager,
+    ISkillDiscoveryService skillDiscovery) : IAgentRuntime
 {
     public async IAsyncEnumerable<AgentStreamUpdate> RunStreamingAsync(
         AgentRunRequest request, [EnumeratorCancellation] CancellationToken ct = default)
@@ -26,6 +28,17 @@ public sealed class AgentExecutor(
         // 1. Resolve config + session
         var (session, agent, model, setupError) = await ResolveSetupAsync(request, ct);
         if (setupError is not null) { yield return new ErrorUpdate(setupError); yield break; }
+
+        // Resolve skill content and build effective system prompt
+        var allSkills = await skillDiscovery.GetAllSkillsAsync(configurationService.Config.SkillDirectories, ct);
+        var resolvedSkillIds = agent!.ResolveSkillIds(allSkills.Select(s => s.Id)).ToHashSet();
+        var skillContents = allSkills
+            .Where(s => resolvedSkillIds.Contains(s.Id))
+            .Select(s => s.Content)
+            .ToList();
+        var effectiveSystemPrompt = skillContents.Count > 0
+            ? (agent!.SystemPrompt ?? "") + "\n\n" + string.Join("\n\n---\n\n", skillContents)
+            : agent!.SystemPrompt;
 
         using var chatClient = providerFactory.Create(model!);
 
@@ -39,7 +52,7 @@ public sealed class AgentExecutor(
             ChatHistoryProvider = historyProvider,
             ChatOptions = new ChatOptions
             {
-                Instructions = agent.SystemPrompt,
+                Instructions = effectiveSystemPrompt,
                 Tools = functions.Count > 0 ? functions.Cast<AITool>().ToList() : null
             }
         });
