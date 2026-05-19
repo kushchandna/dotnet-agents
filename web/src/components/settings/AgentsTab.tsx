@@ -4,20 +4,23 @@ interface Agent {
   id: string; name: string; description?: string | null; modelId: string;
   systemPrompt?: string | null; tools: string[];
   mcpServersInheritance: 'all' | 'none' | 'custom'; mcpServers: string[];
+  skillsInheritance: 'all' | 'none' | 'custom'; skills: string[];
 }
 interface McpServer { id: string }
 interface Model { id: string; modelName: string }
 interface FormState {
   id: string; name: string; description: string; modelId: string; systemPrompt: string;
   tools: string[]; mcpServersInheritance: 'all' | 'none' | 'custom'; mcpServers: string[];
+  skillsInheritance: 'all' | 'none' | 'custom'; skills: string[];
 }
-const empty = (): FormState => ({ id: '', name: '', description: '', modelId: '', systemPrompt: '', tools: [], mcpServersInheritance: 'all', mcpServers: [] });
+const empty = (): FormState => ({ id: '', name: '', description: '', modelId: '', systemPrompt: '', tools: [], mcpServersInheritance: 'all', mcpServers: [], skillsInheritance: 'all', skills: [] });
 
 export function AgentsTab() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [availableTools, setAvailableTools] = useState<string[]>([]);
   const [availableMcpServers, setAvailableMcpServers] = useState<McpServer[]>([]);
   const [availableModels, setAvailableModels] = useState<Model[]>([]);
+  const [availableSkills, setAvailableSkills] = useState<{ id: string }[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(empty());
@@ -30,6 +33,7 @@ export function AgentsTab() {
     fetch('/api/tools').then(r => r.json()).then(setAvailableTools).catch(console.error);
     fetch('/api/config/mcp-servers').then(r => r.json()).then(setAvailableMcpServers).catch(console.error);
     fetch('/api/config/models').then(r => r.json()).then(setAvailableModels).catch(console.error);
+    fetch('/api/config/skills').then(r => r.json()).then(setAvailableSkills).catch(console.error);
   }, []);
 
   const handleError = async (res: Response) => {
@@ -44,6 +48,8 @@ export function AgentsTab() {
     systemPrompt: f.systemPrompt || null, tools: f.tools,
     mcpServersInheritance: f.mcpServersInheritance,
     mcpServers: f.mcpServersInheritance === 'custom' ? f.mcpServers : [],
+    skillsInheritance: f.skillsInheritance,
+    skills: f.skillsInheritance === 'custom' ? f.skills : [],
   });
 
   const submitAdd = async () => {
@@ -76,7 +82,7 @@ export function AgentsTab() {
 
   const startEdit = (a: Agent) => {
     setEditingId(a.id); setShowAdd(false); setError(null);
-    setForm({ id: a.id, name: a.name, description: a.description ?? '', modelId: a.modelId, systemPrompt: a.systemPrompt ?? '', tools: a.tools, mcpServersInheritance: a.mcpServersInheritance, mcpServers: a.mcpServers });
+    setForm({ id: a.id, name: a.name, description: a.description ?? '', modelId: a.modelId, systemPrompt: a.systemPrompt ?? '', tools: a.tools, mcpServersInheritance: a.mcpServersInheritance, mcpServers: a.mcpServers, skillsInheritance: a.skillsInheritance, skills: a.skills });
   };
 
   const cancelForm = () => { setShowAdd(false); setEditingId(null); setForm(empty()); setError(null); };
@@ -86,6 +92,9 @@ export function AgentsTab() {
 
   const toggleMcpServer = (serverId: string) =>
     setForm(f => ({ ...f, mcpServers: f.mcpServers.includes(serverId) ? f.mcpServers.filter(s => s !== serverId) : [...f.mcpServers, serverId] }));
+
+  const toggleSkill = (skillId: string) =>
+    setForm(f => ({ ...f, skills: f.skills.includes(skillId) ? f.skills.filter(s => s !== skillId) : [...f.skills, skillId] }));
 
   const renderForm = (isEdit: boolean, onSave: () => void) => (
     <div className="settings-form">
@@ -164,6 +173,30 @@ export function AgentsTab() {
         )}
         {form.mcpServersInheritance === 'custom' && availableMcpServers.length === 0 && (
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>No MCP servers configured. Add them in the MCP Servers tab.</div>
+        )}
+      </div>
+      <div className="settings-form-row">
+        <label className="settings-form-label">Skills</label>
+        <div className="settings-radio-group">
+          {(['all', 'none', 'custom'] as const).map(v => (
+            <label key={v} className="settings-radio-item">
+              <input type="radio" name="skillsInheritance" value={v} checked={form.skillsInheritance === v} onChange={() => setForm(f => ({ ...f, skillsInheritance: v }))} />
+              {v}
+            </label>
+          ))}
+        </div>
+        {form.skillsInheritance === 'custom' && availableSkills.length > 0 && (
+          <div className="settings-checkbox-group" style={{ marginTop: 8 }}>
+            {availableSkills.map(s => (
+              <label key={s.id} className="settings-checkbox-item">
+                <input type="checkbox" checked={form.skills.includes(s.id)} onChange={() => toggleSkill(s.id)} />
+                {s.id}
+              </label>
+            ))}
+          </div>
+        )}
+        {form.skillsInheritance === 'custom' && availableSkills.length === 0 && (
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>No skills configured. Add them in the Skills tab.</div>
         )}
       </div>
       <div className="settings-form-actions">
