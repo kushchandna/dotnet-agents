@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 interface Skill {
   id: string;
-  description: string;
+  description: string | null;
 }
 
 export function SkillsTab() {
@@ -37,7 +37,10 @@ export function SkillsTab() {
       body: JSON.stringify({ path }),
     });
     if (!res.ok) {
-      setError(`Error ${res.status}`);
+      const body = await res.json().catch(() => null);
+      setError(Array.isArray(body)
+        ? body.map((e: { path: string; message: string }) => `${e.path}: ${e.message}`).join('; ')
+        : `Error ${res.status}`);
       return;
     }
     setNewDir('');
@@ -45,6 +48,7 @@ export function SkillsTab() {
   };
 
   const handleRemove = async (dir: string) => {
+    if (!window.confirm(`Remove "${dir}"?`)) return;
     setError(null);
     const res = await fetch('/api/config/skill-directories', {
       method: 'DELETE',
@@ -52,7 +56,10 @@ export function SkillsTab() {
       body: JSON.stringify({ path: dir }),
     });
     if (!res.ok) {
-      setError(`Error ${res.status}`);
+      const body = await res.json().catch(() => null);
+      setError(Array.isArray(body)
+        ? body.map((e: { path: string; message: string }) => `${e.path}: ${e.message}`).join('; ')
+        : `Error ${res.status}`);
       return;
     }
     reload();
