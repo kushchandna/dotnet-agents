@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DotnetAgents.Core.Models;
 using DotnetAgents.Core.Runtime;
+using DotnetAgents.Core.Skills;
 using DotnetAgents.Runtime.Mcp;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -18,7 +19,8 @@ public static class ApiTestFactory
     };
 
     public static WebApplicationFactory<Program> Create(
-        AgentsConfig? config = null, IAgentRuntime? runtime = null, IMcpConnectionManager? mcpManager = null)
+        AgentsConfig? config = null, IAgentRuntime? runtime = null,
+        IMcpConnectionManager? mcpManager = null, ISkillDiscoveryService? skillDiscovery = null)
     {
         var cfg = config ?? new AgentsConfig
         {
@@ -50,6 +52,13 @@ public static class ApiTestFactory
                     var existing = services.SingleOrDefault(d => d.ServiceType == typeof(IMcpConnectionManager));
                     if (existing is not null) services.Remove(existing);
                     services.AddSingleton(mcpManager);
+                }
+
+                if (skillDiscovery is not null)
+                {
+                    var existing = services.SingleOrDefault(d => d.ServiceType == typeof(ISkillDiscoveryService));
+                    if (existing is not null) services.Remove(existing);
+                    services.AddSingleton(skillDiscovery);
                 }
             });
         });

@@ -1,6 +1,7 @@
 using DotnetAgents.Api.Dto;
 using DotnetAgents.Core.Configuration;
 using DotnetAgents.Core.Skills;
+using Microsoft.AspNetCore.Mvc;
 
 namespace DotnetAgents.Api.Endpoints;
 
@@ -26,7 +27,7 @@ public static class SkillsEndpoints
         }).WithName("AddSkillDirectory").WithOpenApi();
 
         app.MapDelete("/api/config/skill-directories", async (
-            SkillDirectoryRequest req,
+            [FromBody] SkillDirectoryRequest req,
             IConfigurationService cfg,
             IConfigSaver saver,
             CancellationToken ct) =>
