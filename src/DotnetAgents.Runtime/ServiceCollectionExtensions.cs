@@ -2,6 +2,7 @@ using DotnetAgents.Core.Configuration;
 using DotnetAgents.Core.Models;
 using DotnetAgents.Core.Runtime;
 using DotnetAgents.Core.Sessions;
+using DotnetAgents.Core.Skills;
 using DotnetAgents.Runtime.Execution;
 using DotnetAgents.Runtime.Mcp;
 using DotnetAgents.Runtime.Providers;
@@ -27,6 +28,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<McpConnectionManager>();
         services.AddSingleton<IMcpConnectionManager>(sp => sp.GetRequiredService<McpConnectionManager>());
         services.AddHostedService(sp => sp.GetRequiredService<McpConnectionManager>());
+        services.AddSingleton<ISkillDiscoveryService, SkillDiscoveryService>();
         return services;
     }
 }
