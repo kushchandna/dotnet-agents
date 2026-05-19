@@ -67,3 +67,6 @@ Thumbs.db
 *.nupkg
 .nuget/
 packages/
+
+samples/config.json
+samples/skills

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG="${1:-$SCRIPT_DIR/config.json}"
+CONFIG="${1:-$SCRIPT_DIR/samples/config.json}"
 
 echo "Stopping existing API..."
 pkill -f "DotnetAgents.Api" 2>/dev/null || true
