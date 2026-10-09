@@ -87,4 +87,49 @@ public class JsonSessionStoreTests
         var list = await _store.ListAsync("ghost");
         Assert.That(list, Is.Empty);
     }
+
+    [Test]
+    public void Delete_MissingSession_DoesNotThrow()
+    {
+        Assert.DoesNotThrowAsync(() => _store.DeleteAsync("alice", "nope"));
+    }
+
+    [Test]
+    public async Task Delete_DoesNotAffectOtherUsersSessions()
+    {
+        var a = await _store.CreateAsync("alice", "a");
+        var b = await _store.CreateAsync("bob", "a");
+        await _store.DeleteAsync("alice", a.Id);
+        Assert.That(await _store.GetAsync("bob", b.Id), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task GetMessages_MissingSession_ReturnsEmpty()
+    {
+        Assert.That(await _store.GetMessagesAsync("alice", "nope"), Is.Empty);
+    }
+
+    [Test]
+    public async Task GetMessages_ReturnsSavedMessages()
+    {
+        var s = await _store.CreateAsync("alice", "a");
+        await _store.SaveAsync(s with {
+            Messages = [new SessionMessage{Id="m1",Role="user",Content="hi",Timestamp=DateTimeOffset.UtcNow}]
+        });
+        var msgs = await _store.GetMessagesAsync("alice", s.Id);
+        Assert.That(msgs, Has.Count.EqualTo(1));
+        Assert.That(msgs[0].Content, Is.EqualTo("hi"));
+    }
+
+    [Test]
+    public async Task Save_ConcurrentWrites_LeaveValidFileAndNoTempFiles()
+    {
+        var s = await _store.CreateAsync("alice", "a");
+        await Task.WhenAll(Enumerable.Range(0, 20).Select(i =>
+            _store.SaveAsync(s with { Title = "t" + i })));
+
+        var got = await _store.GetAsync("alice", s.Id);
+        Assert.That(got!.Title, Does.StartWith("t"));
+        Assert.That(Directory.GetFiles(Path.Combine(_root, "alice"), "*.tmp"), Is.Empty);
+    }
 }
