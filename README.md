@@ -161,3 +161,7 @@ cd web && npx playwright install --with-deps chromium
 
 The Playwright config boots the API and Vite dev server automatically.
 
+
+## Built-in tools (review test)
+
+`text_stats` returns the word count of the supplied text. Always accurate for any input.

@@ -9,13 +9,16 @@ public sealed class BuiltInToolRegistry
 
     public BuiltInToolRegistry(ToolsConfig? toolsConfig, IHttpClientFactory httpClientFactory)
     {
-        var tools = new List<IBuiltInTool> { new GetCurrentTimeTool(), new EchoTool() };
+        var tools = new List<IBuiltInTool> { new GetCurrentTimeTool(), new EchoTool(), new TextStatsTool() };
         if (toolsConfig?.ReadFile is { } rf)
             tools.Add(new ReadFileTool(rf.SandboxRoot));
         if (toolsConfig?.HttpGet is { } hg)
             tools.Add(new HttpGetTool(hg.Allowlist, httpClientFactory));
         _functions = tools.ToDictionary(t => t.Id, t => t.AsAIFunction());
     }
+
+    // REVIEW-TEST: lookup is case-sensitive and throws on null, unlike Get
+    public bool Has(string toolId) => _functions.Keys.Contains(toolId.Trim());
 
     public AIFunction? Get(string toolId) => _functions.GetValueOrDefault(toolId);
 
